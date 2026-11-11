@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🤖 WhatsApp AI CRM & Automation Platform
 
 Plataforma completa de **Atendimento Inteligente com IA**, **Aprendizado Contínuo (Active Learning)**, **Transbordo para Atendente Humano** e **Automação de Campanhas e Agendamentos no WhatsApp**, controlada 100% por um **Painel Web Moderno** e executada silenciosamente na **Bandeja do Windows (System Tray)** — sem precisar deixar janelas de terminal abertas.
@@ -188,3 +189,6 @@ node tests/auth.test.mjs
 node tests/recorrencia.test.mjs
 node tests/triagem.test.mjs
 ```
+=======
+# WhatsApp-AI-CRM-Automation-Platform
+>>>>>>> a9e742111c4aebcb2b494c9385b41fcdfabc58ca
