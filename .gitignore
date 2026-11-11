@@ -1,0 +1,26 @@
+# Dependências
+node_modules/
+ChatbotWhatsApp/node_modules/
+
+# Sessão e chaves de autenticação do WhatsApp (NUNCA subir para o GitHub)
+auth_info/
+ChatbotWhatsApp/auth_info/
+
+# Dados pessoais, agendamentos, contatos, grupos, senhas e configurações locais
+data/*
+!data/.gitkeep
+ChatbotWhatsApp/data/*
+!ChatbotWhatsApp/data/.gitkeep
+
+# Mídias pessoais enviadas pelos usuários (mantém apenas a pasta vazia com .gitkeep)
+midia/*
+!midia/.gitkeep
+ChatbotWhatsApp/midia/*
+!ChatbotWhatsApp/midia/.gitkeep
+
+# Variáveis de ambiente, chaves e logs
+.env
+.env.*
+*.log
+npm-debug.log*
+

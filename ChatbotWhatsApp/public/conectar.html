@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Conectar WhatsApp — Painel do Bot</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="pagina-login">
+    <div class="caixa-login">
+        <h2>📱 Conectar ao WhatsApp</h2>
+        <p class="texto-ajuda">No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho, e escaneie o código.</p>
+        <img id="qrImg" class="qr-img" alt="QR Code" style="display:none;">
+        <p id="statusConectar" class="status-login">Verificando conexão...</p>
+        <div class="linha-acoes centro">
+            <button type="button" id="btnLigarConectar" class="botao-secundario">▶️ Ligar bot</button>
+            <button type="button" id="btnNovoQr" class="botao-secundario">🔄 Gerar novo QR Code</button>
+            <button type="button" id="btnSairConectar" class="botao-perigo">Sair</button>
+        </div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById("statusConectar");
+        const qrImg = document.getElementById("qrImg");
+
+        async function verificar() {
+            try {
+                const sessao = await fetch("/api/sessao").then(r => r.json());
+                if (!sessao.logado) { window.location.href = "/login.html"; return; }
+
+                const dados = await fetch("/api/qr").then(r => r.json());
+                if (dados.conectado) {
+                    statusEl.textContent = "✅ Conectado! Redirecionando...";
+                    setTimeout(() => { window.location.href = "/"; }, 800);
+                    return;
+                }
+                if (dados.erro && !dados.qr) {
+                    statusEl.textContent = dados.erro;
+                    statusEl.style.color = "#e74c3c";
+                } else if (dados.qr) {
+                    statusEl.style.color = "";
+                    qrImg.src = dados.qr;
+                    qrImg.style.display = "block";
+                    statusEl.textContent = "Aguardando leitura do QR Code...";
+                } else if (dados.sessaoInvalida) {
+                    statusEl.textContent = "Sessão encerrada pelo WhatsApp. Gerando novo QR Code, aguarde...";
+                } else {
+                    statusEl.textContent = "Gerando QR Code, aguarde... (se o bot estiver desligado, clique em Ligar)";
+                }
+            } catch (err) {
+                statusEl.textContent = "Erro ao consultar status: " + err.message;
+            }
+            setTimeout(verificar, 2000);
+        }
+
+        document.getElementById("btnLigarConectar").addEventListener("click", () => {
+            fetch("/api/bot/ligar", { method: "POST" });
+            statusEl.textContent = "Ligando o bot...";
+        });
+
+        document.getElementById("btnNovoQr").addEventListener("click", async () => {
+            qrImg.style.display = "none";
+            statusEl.style.color = "";
+            statusEl.textContent = "Gerando novo QR Code, aguarde...";
+            await fetch("/api/bot/novo-qr", { method: "POST" });
+        });
+
+        document.getElementById("btnSairConectar").addEventListener("click", async () => {
+            await fetch("/api/logout", { method: "POST" });
+            window.location.href = "/login.html";
+        });
+
+        verificar();
+    </script>
+</body>
+</html>

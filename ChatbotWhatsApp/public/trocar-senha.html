@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Trocar senha — Painel do Bot</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="pagina-login">
+    <div class="caixa-login">
+        <h2>🔑 Trocar senha</h2>
+        <p class="texto-ajuda">Por segurança, defina uma senha pessoal antes de continuar. Use pelo menos 8 caracteres, sem senhas comuns.</p>
+        <form id="formTroca">
+            <label class="rotulo" for="campoSenhaAtual">Senha atual</label>
+            <input type="password" id="campoSenhaAtual" autocomplete="current-password" required>
+
+            <label class="rotulo" for="campoNovaSenha">Nova senha</label>
+            <input type="password" id="campoNovaSenha" autocomplete="new-password" minlength="8" required>
+
+            <label class="rotulo" for="campoConfirmacao">Confirme a nova senha</label>
+            <input type="password" id="campoConfirmacao" autocomplete="new-password" minlength="8" required>
+
+            <button type="submit" class="botao-primario largura-total">Salvar nova senha</button>
+            <p id="erroTroca" class="erro-login"></p>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById("formTroca").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const erro = document.getElementById("erroTroca");
+            erro.textContent = "";
+
+            const resposta = await fetch("/api/trocar-senha", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    senhaAtual: document.getElementById("campoSenhaAtual").value,
+                    novaSenha: document.getElementById("campoNovaSenha").value,
+                    confirmacao: document.getElementById("campoConfirmacao").value,
+                }),
+            });
+            const dados = await resposta.json().catch(() => ({}));
+
+            if (!resposta.ok) {
+                erro.textContent = dados.erro || "Não foi possível trocar a senha.";
+                return;
+            }
+            window.location.href = "/";
+        });
+    </script>
+</body>
+</html>

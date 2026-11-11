@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Painel do Bot - Gaicos Store</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="topo">
+        <h1>🤖 Painel do Bot — Gaicos Store</h1>
+        <nav class="abas">
+            <button type="button" class="aba-botao ativa" data-aba="agendamentos">📅 Agendamentos</button>
+            <button type="button" class="aba-botao" data-aba="triagem">🧭 Triagem & IA do Site</button>
+            <button type="button" class="aba-botao" data-aba="status">⚙️ Status do sistema</button>
+            <a href="/trocar-senha.html" class="link-botao">🔑 Trocar senha</a>
+            <button type="button" id="btnSair" class="aba-botao">🚪 Sair</button>
+        </nav>
+    </header>
+
+    <main>
+        <section id="abaAgendamentos" class="aba">
+            <section class="secao-principal">
+                <div class="cabecalho-secao">
+                    <h2>Agendamentos</h2>
+                    <button id="btnNovoAgendamento" class="botao-primario">+ Novo agendamento</button>
+                </div>
+                <div id="gradeAgendamentos" class="grade-agendamentos"></div>
+            </section>
+
+            <details class="painel-grupos">
+                <summary>👥 Gerenciar grupos <span id="contadorGrupos" class="contador-pill"></span></summary>
+                <div class="conteudo-painel">
+                    <div class="linha-acoes">
+                        <input type="text" id="filtroGrupos" placeholder="🔍 Filtrar por nome...">
+                        <button id="btnAtivarTodos">Ativar todos</button>
+                        <button id="btnDesativarTodos">Desativar todos</button>
+                    </div>
+
+                    <button id="btnBuscarGruposWhatsapp">🔄 Buscar grupos do WhatsApp</button>
+                    <input type="text" id="filtroGruposNovos" placeholder="🔍 Filtrar novos grupos..." style="display:none;">
+                    <div id="listaGruposWhatsapp"></div>
+
+                    <table id="tabelaGrupos">
+                        <thead>
+                            <tr><th>Nome</th><th>Ativo</th><th>Ação</th></tr>
+                        </thead>
+                        <tbody id="corpoTabelaGrupos"></tbody>
+                    </table>
+                </div>
+            </details>
+
+            <details class="painel-grupos">
+                <summary>📱 Gerenciar contatos <span id="contadorContatos" class="contador-pill"></span></summary>
+                <div class="conteudo-painel">
+                    <div class="linha-acoes">
+                        <input type="text" id="novoContatoNome" placeholder="Nome do contato">
+                        <input type="text" id="novoContatoTelefone" placeholder="Telefone (com DDI+DDD, ex: 5511999999999)">
+                        <button id="btnAdicionarContato" class="botao-primario">+ Adicionar</button>
+                    </div>
+
+                    <input type="text" id="filtroContatos" placeholder="🔍 Filtrar por nome...">
+
+                    <table id="tabelaContatos">
+                        <thead>
+                            <tr><th>Nome</th><th>Telefone</th><th>Ativo</th><th>Ação</th></tr>
+                        </thead>
+                        <tbody id="corpoTabelaContatos"></tbody>
+                    </table>
+                </div>
+            </details>
+
+            <details class="painel-grupos">
+                <summary>📋 Listas de contatos <span id="contadorListas" class="contador-pill"></span></summary>
+                <div class="conteudo-painel">
+                    <div id="gradeListasContatos" class="grade-agendamentos" style="margin-bottom:16px;"></div>
+
+                    <h3 id="tituloFormLista" style="margin-top:0;">Nova lista</h3>
+                    <form id="formListaContato">
+                        <input type="hidden" id="listaId">
+                        <input type="text" id="listaNome" placeholder="Nome da lista (ex: Clientes VIP)" required>
+                        <div id="checkboxContatosLista" class="lista-checkbox-grupos" style="margin-bottom:12px;"></div>
+                        <button type="submit" class="botao-primario">💾 Salvar lista</button>
+                        <button type="button" id="btnCancelarLista" class="botao-secundario" style="display:none;">Cancelar</button>
+                    </form>
+                </div>
+            </details>
+        </section>
+
+        <section id="abaTriagem" class="aba oculto">
+            <div class="cartao-status">
+                <div class="cartao-status-linha">
+                    <div>
+                        <label class="check-ativo" style="font-size:1.05em; font-weight:700;">
+                            <input type="checkbox" id="triagemAtivo"> Ativar atendimento automático no WhatsApp
+                        </label>
+                        <p class="texto-ajuda" style="margin:6px 0 0 0;">
+                            Respostas curtas, dinâmicas e naturais baseadas no site <strong>gaicos-store.com.br</strong> e no seu treinamento contínuo.
+                        </p>
+                    </div>
+                    <button type="button" id="triagemSalvar" class="botao-primario">💾 Salvar configuração</button>
+                </div>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">🧪 Simulador & Treinamento Rápido</h3>
+                <p class="texto-ajuda" style="margin-top:0;">
+                    Teste uma pergunta abaixo. Se quiser que o bot responda de um jeito mais curto ou diferente, basta ajustar a resposta logo abaixo e clicar em <strong>🧠 Ensinar ao Bot</strong>!
+                </p>
+                <div class="linha-acoes">
+                    <input type="text" id="inputSimularPergunta" placeholder="Ex: Oi, quanto custa pra fazer um playmat personalizado?" style="margin:0; flex:1;">
+                    <button type="button" id="btnSimularPergunta" class="botao-alerta">🚀 Testar Resposta</button>
+                </div>
+
+                <div id="resultadoSimulacao" class="oculto" style="margin-top:12px; background:#dcf8c6; border-radius:10px; padding:14px; white-space:pre-wrap; font-size:0.93em; border:1px solid #b7e49c;"></div>
+
+                <div id="blocoCorrigirSimulacao" class="oculto" style="margin-top:12px; background:#f8fafc; border:1px solid var(--borda); border-radius:10px; padding:14px;">
+                    <label class="rotulo" style="color:var(--verde-escuro);">🎯 Quer adequar essa resposta? Edite abaixo como o bot DEVE responder essa pergunta:</label>
+                    <textarea id="inputCorrigirSimulacao" rows="3" maxlength="2000" style="margin:8px 0;"></textarea>
+                    <button type="button" id="btnEnsinarDaSimulacao" class="botao-primario">🧠 Ensinar ao Bot (Salvar no Aprendizado)</button>
+                </div>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">🧠 Aprendizado Contínuo do Bot (Treinar Respostas aos Poucos)</h3>
+                <p class="texto-ajuda" style="margin-top:0;">
+                    Aqui você vai moldando o bot ao seu gosto: toda vez que você ensina uma resposta, ele passa a responder perguntas iguais ou parecidas exatamente do seu jeito e aprende seu estilo curto e dinâmico.
+                </p>
+
+                <div style="background:var(--fundo); border-radius:10px; padding:14px; margin-bottom:16px;">
+                    <input type="hidden" id="treinoId">
+                    <label class="rotulo">Quando o cliente perguntar algo parecido com: <small style="font-weight:400;">(dica: pode separar variações com <code>|</code>)</small></label>
+                    <input type="text" id="treinoPergunta" placeholder="Ex: tem desconto no pix | faz mais barato | tem cupom" style="margin:6px 0 10px 0;">
+
+                    <label class="rotulo">O bot deve responder exatamente assim (curto e direto):</label>
+                    <textarea id="treinoResposta" rows="3" maxlength="2000" placeholder="Ex: No Pix já está com nosso melhor valor promocional direto no site! Qual modelo você curtiu?" style="margin:6px 0 10px 0;"></textarea>
+
+                    <div class="linha-acoes" style="margin:0;">
+                        <button type="button" id="btnSalvarTreino" class="botao-primario">🧠 Ensinar Resposta ao Bot</button>
+                        <button type="button" id="btnCancelarTreino" class="botao-secundario oculto">Cancelar edição</button>
+                    </div>
+                </div>
+
+                <details class="accordion" open>
+                    <summary>📚 Respostas que o Bot já Aprendeu com Você <span id="contadorExemplosTreinados" class="contador-pill">0</span></summary>
+                    <div class="conteudo-accordion">
+                        <div id="listaExemplosTreinados"></div>
+                    </div>
+                </details>
+
+                <details class="accordion">
+                    <summary>💬 Últimas Perguntas dos Clientes (Clique em "Corrigir" para ensinar a resposta ideal) <span id="contadorInteracoesRecentes" class="contador-pill">0</span></summary>
+                    <div class="conteudo-accordion">
+                        <div class="linha-acoes" style="justify-content:flex-end; margin-top:0;">
+                            <button type="button" id="btnAtualizarAprendizado" class="botao-secundario">🔄 Atualizar lista</button>
+                            <button type="button" id="btnLimparInteracoes" class="botao-perigo">🗑️ Limpar histórico recente</button>
+                        </div>
+                        <div id="listaInteracoesRecentes"></div>
+                    </div>
+                </details>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">🌐 Site da Loja & Inteligência Artificial</h3>
+                <div class="linha-acoes">
+                    <label class="check-ativo">
+                        <input type="checkbox" id="iaAtiva" checked> Conversar livremente com IA baseada no site + informações exclusivas
+                    </label>
+                </div>
+
+                <label class="rotulo">URL do seu site</label>
+                <div class="linha-acoes" style="margin-top:4px;">
+                    <input type="url" id="iaUrlSite" placeholder="https://www.gaicos-store.com.br/" style="margin:0; flex:1;">
+                    <button type="button" id="btnSincronizarSite" class="botao-secundario">🔄 Ler / Atualizar Site Agora</button>
+                </div>
+                <p id="statusSincronizacaoSite" class="texto-ajuda" style="margin-top:4px;"></p>
+
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:12px;">
+                    <div>
+                        <label class="rotulo">Motor de Inteligência Artificial</label>
+                        <select id="iaProvedor" style="width:100%; padding:10px 12px; margin:6px 0; border:1px solid var(--borda); border-radius:8px; font-size:0.95em;">
+                            <option value="local">⚡ Modo Inteligente Local (Sem Chave - Gratuito)</option>
+                            <option value="gemini">✨ Google Gemini (Recomendado - API Gratuita)</option>
+                            <option value="groq">🚀 Groq (Llama 3.3 - API Gratuita e Ultra-rápida)</option>
+                            <option value="openai">🤖 OpenAI (ChatGPT - gpt-4o-mini)</option>
+                        </select>
+                    </div>
+                    <div id="blocoModeloIa">
+                        <label class="rotulo">Modelo da IA</label>
+                        <input type="text" id="iaModelo" placeholder="Ex: gemini-2.5-flash">
+                    </div>
+                </div>
+
+                <div id="blocoChaveIa">
+                    <label class="rotulo">Chave da API (API Key)</label>
+                    <input type="password" id="iaApiKey" placeholder="Cole aqui sua chave da API (Gemini, Groq ou OpenAI)">
+                    <p id="dicaProvedorIa" class="texto-ajuda" style="margin-top:-8px;"></p>
+                </div>
+
+                <label class="rotulo">🔑 Informações Exclusivas que Só Você Sabe (Segredos da Loja, Prazos Internos, Espessura, Regras)</label>
+                <p class="texto-ajuda" style="margin:2px 0 6px 0;">
+                    Escreva aqui tudo o que <strong>não está no site</strong> mas que você quer que o bot saiba (ex: espessura do playmat em mm, borda costurada, prazo de produção em dias úteis). <em>Nunca é apagado ao sincronizar o site.</em>
+                </p>
+                <textarea id="iaConhecimentoExtra" rows="5" maxlength="25000" placeholder="Ex: Nossos playmats têm 3mm de espessura, borda costurada reforçada e levam de 3 a 5 dias úteis para produção..."></textarea>
+
+                <details class="accordion" style="margin-top:8px;">
+                    <summary>🌐 Base de Conhecimento Lida do Site (Produtos, Preços e Links)</summary>
+                    <div class="conteudo-accordion">
+                        <textarea id="iaConhecimentoSite" rows="8" maxlength="40000" placeholder="Conteúdo lido do site..."></textarea>
+                    </div>
+                </details>
+
+                <details class="accordion" style="margin-top:8px;">
+                    <summary>🎯 Instruções e Personalidade do Atendente IA (Prompt do Sistema)</summary>
+                    <div class="conteudo-accordion">
+                        <textarea id="iaPromptSistema" rows="6" maxlength="10000"></textarea>
+                    </div>
+                </details>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">👤 Opção de Falar com Atendente Humano</h3>
+                <p class="texto-ajuda" style="margin-top:0;">
+                    Quando o cliente pede para falar com um atendente (ou digita <code>atendente</code>), o bot envia a mensagem abaixo, pausa as respostas automáticas para aquele cliente e avisa você no Grupo de Controle.
+                </p>
+
+                <label class="rotulo">Mensagem enviada ao cliente ao chamar um atendente humano</label>
+                <textarea id="iaMensagemHumano" rows="2" maxlength="2000"></textarea>
+
+                <div class="linha-acoes">
+                    <label class="rotulo">Pausar o robô para esse cliente por (horas):</label>
+                    <input type="number" id="iaHorasPausa" min="1" max="8760" value="24" style="width:100px; margin:0;">
+                </div>
+
+                <div class="linha-acoes">
+                    <label class="check-ativo">
+                        <input type="checkbox" id="iaPausarManual"> Pausar o robô automaticamente se eu responder o cliente pelo celular / WhatsApp Web (dica: você também pode enviar <code>#pausar</code> ou <code>#bot</code> no chat)
+                    </label>
+                </div>
+
+                <div class="linha-acoes">
+                    <label class="check-ativo">
+                        <input type="checkbox" id="iaAvisarGrupo" checked> Enviar alerta no Grupo de Controle com link direto do WhatsApp do cliente
+                    </label>
+                </div>
+
+                <div style="margin-top:18px; border-top:1px solid var(--borda); padding-top:14px;">
+                    <div class="cartao-status-linha">
+                        <strong>⏸️ Clientes em Atendimento Humano (Robô Pausado)</strong>
+                        <div class="botoes-controle">
+                            <button type="button" id="btnAtualizarPausas" class="botao-secundario">🔄 Atualizar</button>
+                            <button type="button" id="btnReativarTodos" class="botao-perigo">▶️ Reativar robô para todos</button>
+                        </div>
+                    </div>
+                    <div id="listaPausasHumano" style="margin-top:10px;"></div>
+                </div>
+            </div>
+
+            <details class="painel-grupos">
+                <summary>🧭 Menu de opções numeradas (Opcional — funciona em conjunto com a IA)</summary>
+                <div class="conteudo-painel">
+                    <p class="texto-ajuda">
+                        Se quiser exibir também um menu numerado (1, 2, 3...) quando o cliente mandar "Oi", configure abaixo. Caso deixe sem pergunta inicial, o bot conversará 100% de forma livre com a IA do site.
+                    </p>
+                    <label class="rotulo">Mensagem de boas-vindas do menu</label>
+                    <textarea id="triagemBoasVindas" rows="2" maxlength="4000"></textarea>
+                    <label class="rotulo">Pergunta inicial do menu</label>
+                    <select id="triagemInicial" style="width:100%; padding:10px 12px; margin:6px 0 14px 0; border:1px solid var(--borda); border-radius:8px;"></select>
+
+                    <div class="linha-acoes">
+                        <button type="button" id="triagemNovaPergunta" class="botao-primario">+ Nova pergunta</button>
+                    </div>
+                    <div id="triagemLista"></div>
+                </div>
+            </details>
+        </section>
+
+        <section id="abaStatus" class="aba oculto">
+            <div class="cartao-status">
+                <div class="cartao-status-linha">
+                    <div>
+                        <strong>Conexão com o WhatsApp:</strong>
+                        <span id="statusConexaoTexto">verificando...</span>
+                    </div>
+                    <div class="botoes-controle">
+                        <button type="button" id="btnLigarBot" class="botao-primario">▶️ Ligar</button>
+                        <button type="button" id="btnDesligarBot" class="botao-perigo">⏸️ Desligar</button>
+                        <button type="button" id="btnReiniciarBot" class="botao-secundario">🔄 Reiniciar programa</button>
+                        <button type="button" id="btnEncerrarPrograma" class="botao-perigo">⏹️ Encerrar programa</button>
+                    </div>
+                </div>
+
+                <div id="infoPm2" class="grade-info-pm2"></div>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">🎛️ Controle remoto via WhatsApp</h3>
+                <p style="color:#667781; font-size:0.9em;">Envie comandos no grupo configurado: <code>!status</code>, <code>!historico</code>, <code>!agendamentos</code>, <code>!restart</code>, <code>!ajuda</code></p>
+                <div class="linha-acoes">
+                    <button type="button" id="btnCarregarGruposControle">🔄 Carregar grupos</button>
+                    <select id="selectGrupoControle" style="flex:1; min-width:200px;"><option>Clique em "Carregar grupos"</option></select>
+                    <button type="button" id="btnSalvarGrupoControle" class="botao-primario">Salvar</button>
+                </div>
+                <p id="grupoControleAtual" style="font-size:0.88em; color:#667781;"></p>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">🧰 Programa e instalação</h3>
+                <p class="texto-ajuda">Tudo pode ser feito por aqui, sem terminal.</p>
+                <p id="infoInstalacao" class="status-login">Carregando...</p>
+                <div class="linha-acoes">
+                    <label class="check-ativo"><input type="checkbox" id="chkInicioAuto"> Iniciar automaticamente com o Windows</label>
+                </div>
+                <div class="linha-acoes">
+                    <label class="check-ativo"><input type="checkbox" id="chkAtalhoDesktop"> Atalho na área de trabalho</label>
+                </div>
+                <div class="botoes-controle">
+                    <button type="button" id="btnAtualizarBiblioteca" class="botao-secundario">⬆️ Atualizar biblioteca do WhatsApp</button>
+                    <button type="button" id="btnDesinstalar" class="botao-perigo">🗑️ Desinstalar programa</button>
+                </div>
+            </div>
+
+            <div class="cabecalho-secao">
+                <h2>Histórico de envios</h2>
+            </div>
+            <table class="tabela-historico">
+                <thead>
+                    <tr><th>Quando</th><th>Horário agend.</th><th>Destino</th><th>Origem</th><th>Status</th><th>Detalhe</th></tr>
+                </thead>
+                <tbody id="corpoHistorico"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <div id="overlayModal" class="overlay oculto">
+        <div class="modal">
+            <button id="btnFecharModal" class="botao-fechar" type="button">✕</button>
+
+            <div id="modoPreview">
+                <div class="celular-preview">
+                    <div class="bolha-whatsapp">
+                        <div id="previewMidias" class="preview-midias"></div>
+                        <p id="previewTexto" class="preview-texto"></p>
+                        <span class="preview-hora" id="previewHoraBolha"></span>
+                    </div>
+                </div>
+
+                <div class="info-preview">
+                    <p><strong>Horário:</strong> <span id="previewHorarioInfo"></span> <span id="previewBadge"></span></p>
+                    <p><strong>Grupos:</strong> <span id="previewGrupos"></span></p>
+                    <p><strong>Contatos:</strong> <span id="previewContatos"></span></p>
+                    <p><strong>Listas:</strong> <span id="previewListas"></span></p>
+                </div>
+
+                <div class="acoes-modal">
+                    <button type="button" id="btnAbrirEdicao" class="botao-secundario">✏️ Editar</button>
+                    <button type="button" id="btnDuplicarModal" class="botao-secundario">📄 Duplicar</button>
+                    <button type="button" id="btnTestarModal" class="botao-alerta">🚀 Testar agora</button>
+                    <button type="button" id="btnExcluirModal" class="botao-perigo">🗑️ Excluir</button>
+                </div>
+            </div>
+
+            <form id="formAgendamento" class="oculto">
+                <input type="hidden" id="agendamentoId">
+                <h2 id="tituloForm">Novo agendamento</h2>
+
+                <label class="rotulo">Horário</label>
+                <input type="time" id="campoHorario" required>
+
+                <label class="rotulo">Repetir</label>
+                <div class="linha-recorrencia">
+                    <select id="campoRepeticao">
+                        <option value="1">Todo dia</option>
+                        <option value="2">Dia sim, dia não</option>
+                        <option value="custom">A cada N dias...</option>
+                    </select>
+                    <input type="number" id="campoIntervaloCustom" min="2" max="365" value="3" style="display:none;">
+                </div>
+
+                <label class="rotulo">Começa em</label>
+                <input type="date" id="campoDataInicio">
+
+                <details class="accordion" open>
+                    <summary>📝 Texto <span id="contadorCaracteres" class="contador-texto">0 caracteres</span></summary>
+                    <div class="conteudo-accordion">
+                        <textarea id="campoTexto" rows="8" required></textarea>
+                    </div>
+                </details>
+
+                <details class="accordion" open>
+                    <summary>📎 Mídias</summary>
+                    <div class="conteudo-accordion">
+                        <input type="file" id="campoArquivos" multiple accept="image/*,video/*">
+                        <ul id="listaMidias"></ul>
+                    </div>
+                </details>
+
+                <details class="accordion" open>
+                    <summary>👥 Grupos</summary>
+                    <div class="conteudo-accordion">
+                        <div class="linha-acoes">
+                            <button type="button" id="btnMarcarTodosGrupos">Marcar todos</button>
+                            <button type="button" id="btnDesmarcarTodosGrupos">Desmarcar todos</button>
+                        </div>
+                        <div id="checkboxGrupos" class="lista-checkbox-grupos"></div>
+                    </div>
+                </details>
+
+                <details class="accordion">
+                    <summary>📱 Contatos individuais</summary>
+                    <div class="conteudo-accordion">
+                        <div id="checkboxContatos" class="lista-checkbox-grupos"></div>
+                    </div>
+                </details>
+
+                <details class="accordion">
+                    <summary>📋 Listas de contatos</summary>
+                    <div class="conteudo-accordion">
+                        <div id="checkboxListas" class="lista-checkbox-grupos"></div>
+                    </div>
+                </details>
+
+                <label class="check-ativo"><input type="checkbox" id="campoAtivo" checked> Agendamento ativo</label>
+
+                <div class="acoes-modal">
+                    <button type="submit" class="botao-primario">💾 Salvar</button>
+                    <button type="button" id="btnCancelarEdicao" class="botao-secundario">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="app.js"></script>
+    <script src="triagem.js"></script>
+</body>
+</html>

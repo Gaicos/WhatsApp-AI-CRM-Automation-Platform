@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Entrar — Painel do Bot</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="pagina-login">
+    <div class="caixa-login">
+        <h2>🤖 Painel do Bot</h2>
+        <form id="formLogin">
+            <label class="rotulo" for="campoUsuario">Usuário</label>
+            <input type="text" id="campoUsuario" autocomplete="username" required autofocus>
+
+            <label class="rotulo" for="campoSenha">Senha</label>
+            <input type="password" id="campoSenha" autocomplete="current-password" required>
+
+            <button type="submit" class="botao-primario largura-total">Entrar</button>
+            <p id="erroLogin" class="erro-login"></p>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById("formLogin").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const erro = document.getElementById("erroLogin");
+            const botao = e.target.querySelector("button");
+            erro.textContent = "";
+            botao.disabled = true;
+
+            try {
+                const resposta = await fetch("/api/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        usuario: document.getElementById("campoUsuario").value,
+                        senha: document.getElementById("campoSenha").value,
+                    }),
+                });
+                const dados = await resposta.json().catch(() => ({}));
+
+                if (!resposta.ok) {
+                    erro.textContent = dados.erro || "Não foi possível entrar.";
+                    return;
+                }
+                window.location.href = dados.precisaTrocarSenha ? "/trocar-senha.html" : "/";
+            } catch {
+                erro.textContent = "Sem conexão com o bot. Ele está rodando?";
+            } finally {
+                botao.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

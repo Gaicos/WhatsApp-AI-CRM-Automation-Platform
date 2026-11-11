@@ -1,0 +1,181 @@
+GAICOS BOT - MANUAL DE PRIMEIRO USO
+===================================
+
+1. COMO INICIAR
+---------------
+Abra a pasta do sistema e clique duas vezes em:
+
+Iniciar-Painel.bat
+
+Nao abra nem execute os arquivos .js separadamente.
+O sistema iniciara em segundo plano e ficara visivel na bandeja do Windows (icone "G" verde na setinha ao lado do relogio), sem precisar deixar o CMD aberto na tela.
+
+- Clique com o botao esquerdo no icone da bandeja para abrir ou ocultar o terminal do bot.
+- Clique com o botao direito no icone da bandeja para:
+  * Abrir Painel no Navegador (http://localhost:3000)
+  * Mostrar / Ocultar Terminal
+  * Reiniciar Bot
+  * Encerrar Bot
+
+Na primeira vez, o sistema pode demorar alguns minutos.
+Ele verifica automaticamente se o Node.js esta instalado. Se necessario, instala:
+- o Node.js;
+- as bibliotecas do sistema.
+
+A exigencia principal e ter acesso a internet na primeira inicializacao.
+Se aparecer uma mensagem solicitando permissao, confirme somente quando a mensagem
+for referente a instalacao do Node.js ou a abertura da pasta do sistema.
+
+
+2. PRIMEIRO ACESSO AO PAINEL
+----------------------------
+Clique com o botao direito no icone "G" na bandeja do Windows (ao lado do relogio) e selecione "Abrir Painel no Navegador", ou abra no navegador:
+
+http://localhost:3000
+
+No primeiro acesso, use:
+
+Usuario: ADMIN
+Senha: 123
+
+Se ADMIN/123 nao abrir o painel, encerre o bot pela bandeja do sistema, execute "Resetar-Senha.bat"
+e aguarde a mensagem de confirmacao. Depois abra novamente o sistema com
+"Iniciar-Painel.bat" e entre com ADMIN/123.
+
+Por seguranca, o painel ira solicitar a troca da senha no primeiro acesso.
+Escolha uma senha com pelo menos 8 caracteres.
+Nao use uma senha facil, como sua data de nascimento, 12345678 ou a palavra admin.
+Guarde essa senha em local seguro.
+
+
+3. CONECTAR O WHATSAPP
+----------------------
+No painel, abra a aba "Status do sistema".
+Procure a opcao relacionada a conexao do WhatsApp.
+
+Se aparecer um QR Code:
+1. Abra o WhatsApp no celular.
+2. Entre em "Configuracoes", depois em "Dispositivos conectados".
+3. Selecione "Conectar um dispositivo".
+4. Aponte a camera para o QR Code mostrado pelo painel.
+
+A conta sera reconhecida na mesma maquina e normalmente nao sera necessario repetir
+o pareamento em cada inicio. Nao conecte o mesmo bot em dois computadores ao mesmo
+tempo, pois isso pode derrubar a conexao.
+
+
+4. CONFIGURAR A TRIAGEM AUTOMATICA
+----------------------------------
+Abra a aba "Triagem automatica".
+
+Mensagem de boas-vindas:
+Esta e a primeira mensagem enviada ao cliente.
+Exemplo: Ola! Como posso ajudar?
+
+Pergunta inicial:
+Selecione a primeira pergunta do fluxo.
+
+Criar uma pergunta:
+1. Clique em "+ Nova pergunta".
+2. Preencha o nome interno da pergunta. Esse nome ajuda na organizacao.
+3. Escreva a mensagem que sera enviada ao cliente.
+4. Cadastre de 1 a 9 opcoes.
+5. Em cada opcao, escreva o texto mostrado ao cliente.
+6. Se quiser, indique uma resposta breve antes da proxima pergunta.
+7. Selecione a pergunta seguinte ou selecione "Encerrar".
+
+As respostas aceitas pelo bot sao somente numeros de 1 ate a quantidade de opcoes.
+Exemplo: uma pergunta com quatro opcoes aceita 1, 2, 3 ou 4.
+O bot informa ao cliente quando digita uma opcao invalida.
+
+Fluxo de exemplo:
+
+Pergunta inicial: Como podemos ajudar?
+1. Quero comprar
+2. Tenho uma duvida
+3. Preciso de suporte
+
+No campo "Resposta antes da proxima etapa", voce pode escrever uma mensagem curta.
+Para encerrar o atendimento automatizado, deixe o destino vazio.
+
+No WhatsApp, o cliente pode iniciar o fluxo enviando "start".
+O sistema tambem inicia automaticamente ao receber a primeira mensagem privada.
+
+
+5. CONFIGURAR GRUPOS E AGENDAMENTOS
+-----------------------------------
+Na aba "Agendamentos":
+- cadastre ou importe os grupos;
+- crie agendamentos;
+- associe grupos, horario, mensagem e midias;
+- mantenha o agendamento ativo somente quando quiser que ele seja executado.
+
+Para utilizar um agendamento:
+1. Clique em "Novo agendamento".
+2. Preencha horario, recorrencia e conteudo.
+3. Selecione os grupos ou contatos de destino.
+4. Clique em salvar.
+5. Confirme que o agendamento esta marcado como ativo.
+
+
+6. USAR COMANDOS ADMINISTRATIVOS
+-------------------------------
+Os comandos administrativos dependem de um grupo de controle configurado em
+"Status do sistema" > "Controle remoto via WhatsApp".
+
+Comandos disponiveis no grupo configurado:
+
+!status        - mostra o estado da conexao e do programa
+!historico     - mostra os ultimos envios
+!agendamentos  - lista os agendamentos cadastrados
+!restart       - reinicia o sistema
+!ajuda         - mostra os comandos
+
+Nao compartilhe o grupo de controle com pessoas nao autorizadas.
+
+
+7. ENCERRAR O SISTEMA
+---------------------
+Quando terminar o uso, clique com o botao direito no icone do Gaicos Bot na bandeja do Windows (ao lado do relogio) e selecione "Encerrar Bot", ou feche pelo painel.
+Ao fechar apenas o navegador ou ocultar a janela do terminal, o bot continua funcionando em segundo plano na bandeja.
+
+Para fechar pelo painel, abra "Status do sistema" e clique em "Encerrar programa".
+Para abrir novamente, execute "Iniciar-Painel.bat".
+
+
+8. PROBLEMAS COMUNS
+-------------------
+O painel nao abre:
+- confira se o icone do Gaicos Bot esta ativo na bandeja do sistema (ao lado do relogio);
+- aguarde alguns segundos apos iniciar;
+- tente abrir http://localhost:3000 novamente;
+- se necessario, encerre pela bandeja e execute Iniciar-Painel.bat novamente.
+
+O WhatsApp caiu ou pediu reconexao:
+- abra "Status do sistema";
+- leia o codigo ou a mensagem de erro;
+- clique em Ligar ou gere um novo QR Code;
+- pareie novamente pelo celular.
+
+Instalacao automatica nao concluiu:
+- confirme que o computador tem acesso a internet;
+- tente executar Iniciar-Painel.bat como administrador;
+- nao altere o arquivo package.json;
+- se a primeira tentativa falhou, execute Iniciar-Painel.bat novamente;
+- nao delete a pasta do sistema;
+- nao instale os arquivos manualmente por partes.
+
+O bot nao envia agendamentos:
+- confirme que esta conectado ao WhatsApp;
+- confirme que o agendamento esta ativo;
+- confira horario, grupos, contatos e recorrencia;
+- confira se o bot nao foi encerrado.
+
+Os dados do sistema ficam nas seguintes areas:
+- dados e configuracoes: pasta "data";
+- arquivos enviados: pasta "midia";
+- credenciais da conexao: pasta "auth_info";
+- historico e agendamentos: arquivos dentro de "data".
+
+Nao exclua estas pastas a nao ser que queira apagar completamente o sistema e todas
+as configuracoes atuais.
