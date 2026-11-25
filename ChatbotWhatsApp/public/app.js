@@ -2,7 +2,7 @@ const fetchOriginal = window.fetch.bind(window);
 window.fetch = async (...args) => {
     const resposta = await fetchOriginal(...args);
     if (resposta.status === 401 && !window.location.pathname.endsWith("login.html")) {
-        window.location.href = "/login.html";
+        window.location.href = "./login.html";
     }
     return resposta;
 };
@@ -28,6 +28,8 @@ function mostrarToast(mensagem, tipo = "ok") {
 }
 
 function caminhoParaUrl(caminho) {
+    if (!caminho) return "";
+    if (/^https?:\/\//i.test(caminho)) return caminho;
     const base = caminho.replace("./midia/", "/midia/");
     const versao = cacheBusterMidia[caminho];
     return versao ? `${base}?v=${versao}` : base;
@@ -989,18 +991,18 @@ document.getElementById("campoRepeticao").addEventListener("change", () => {
 
 document.getElementById("btnSair").addEventListener("click", async () => {
     await fetch("/api/logout", { method: "POST" });
-    window.location.href = "/login.html";
+    window.location.href = "./login.html";
 });
 
 // Início: confere sessão, troca de senha obrigatória e conexão do WhatsApp -----
 
 async function iniciarPagina() {
     const sessao = await fetch("/api/sessao").then(r => r.json()).catch(() => ({ logado: false }));
-    if (!sessao.logado) { window.location.href = "/login.html"; return; }
-    if (sessao.precisaTrocarSenha) { window.location.href = "/trocar-senha.html"; return; }
+    if (!sessao.logado) { window.location.href = "./login.html"; return; }
+    if (sessao.precisaTrocarSenha) { window.location.href = "./trocar-senha.html"; return; }
 
     const status = await fetch("/api/bot/status").then(r => r.json()).catch(() => null);
-    if (!status || !status.conexaoWhatsapp.conectado) { window.location.href = "/conectar.html"; return; }
+    if (!status || !status.conexaoWhatsapp.conectado) { window.location.href = "./conectar.html"; return; }
 
     carregarTudo();
 }

@@ -19,6 +19,7 @@
         </div>
     </div>
 
+    <script src="supabase-bridge.js"></script>
     <script>
         const statusEl = document.getElementById("statusConectar");
         const qrImg = document.getElementById("qrImg");
@@ -26,12 +27,12 @@
         async function verificar() {
             try {
                 const sessao = await fetch("/api/sessao").then(r => r.json());
-                if (!sessao.logado) { window.location.href = "/login.html"; return; }
+                if (!sessao.logado) { window.location.href = "./login.html"; return; }
 
                 const dados = await fetch("/api/qr").then(r => r.json());
                 if (dados.conectado) {
                     statusEl.textContent = "✅ Conectado! Redirecionando...";
-                    setTimeout(() => { window.location.href = "/"; }, 800);
+                    setTimeout(() => { window.location.href = "./"; }, 800);
                     return;
                 }
                 if (dados.erro && !dados.qr) {
@@ -67,7 +68,7 @@
 
         document.getElementById("btnSairConectar").addEventListener("click", async () => {
             await fetch("/api/logout", { method: "POST" });
-            window.location.href = "/login.html";
+            window.location.href = "./login.html";
         });
 
         verificar();

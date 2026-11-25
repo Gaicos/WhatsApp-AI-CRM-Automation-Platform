@@ -23,10 +23,31 @@ import {
   listarDadosAprendizado, ensinarRespostaAoBot, removerExemploAprendizado, limparInteracoesRecentes
 } from "./services/triagemService.js";
 import { resolverDestinos } from "./services/destinosService.js";
+import {
+  lerConfigSupabase,
+  salvarConfigSupabase,
+  verificarConexaoSupabase,
+  sincronizarTudoComSupabase,
+  enviarMidiaParaSupabaseStorage,
+  publicarStatusVivoNoSupabase,
+  iniciarMonitoramentoComandosSupabase
+} from "./services/supabaseService.js";
+
+const syncInicial = await Promise.race([
+  sincronizarTudoComSupabase(),
+  new Promise(resolve => setTimeout(() => resolve({ ok: false, erro: "timeout" }), 6000))
+]).catch(err => ({ ok: false, erro: err?.message || "falha na sincronização inicial" }));
+
+if (syncInicial?.ok) {
+  console.log(`☁️ Supabase sincronizado (${syncInicial.enviadosParaNuvem || 0} enviado(s), ${syncInicial.baixadosDaNuvem || 0} recebido(s)).`);
+} else if (syncInicial?.erro) {
+  console.log(`⚠️ Supabase: ${syncInicial.erro}`);
+}
 
 await garantirUsuarioPadrao();
 
 const app = express();
+app.set("trust proxy", 1);
 const PORTA = Number(process.env.PORT || 3000);
 app.use(express.json({ limit: "2mb" }));
 app.use("/midia", express.static("./midia"));
@@ -55,7 +76,8 @@ app.post("/api/login", async (req, res) => {
   }
   limparFalhas(ip);
   const token = criarSessao(resultado.usuario, resultado.precisaTrocarSenha);
-  res.setHeader("Set-Cookie", `sessao=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Strict`);
+  const ehHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
+  res.setHeader("Set-Cookie", `sessao=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax${ehHttps ? "; Secure" : ""}`);
   res.json({ ok: true, precisaTrocarSenha: resultado.precisaTrocarSenha });
 });
 app.post("/api/logout", exigirLogin, (req, res) => { encerrarSessao(cookieToken(req)); res.json({ ok: true }); });
@@ -159,29 +181,126 @@ app.post("/api/triagem/aprendizado/limpar-interacoes", exigirLogin, (_req, res) 
   res.json(limparInteracoesRecentes());
 });
 
-app.get("/api/bot/status", exigirLogin, (_req, res) => res.json({ conexaoWhatsapp: statusConexao(), processo: statusProcesso(), qr: getQrAtual() }));
+app.get("/health", (_req, res) => {
+  res.json({
+    ok: true,
+    status: "online",
+    whatsappConectado: !!statusConexao().conectado,
+    uptimeSegundos: Math.floor(process.uptime()),
+    fusoHorario: process.env.TZ || "America/Sao_Paulo",
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/api/bot/status", exigirLogin, async (_req, res) => {
+  const supabaseStatus = await verificarConexaoSupabase();
+  res.json({
+    conexaoWhatsapp: statusConexao(),
+    processo: statusProcesso(),
+    qr: getQrAtual(),
+    supabase: supabaseStatus
+  });
+});
+app.get("/api/qr", exigirLogin, (_req, res) => {
+  const c = statusConexao();
+  res.json({
+    conectado: !!c.conectado,
+    qr: getQrAtual(),
+    sessaoInvalida: !!c.sessaoInvalida,
+    erro: c.erroConexao || null
+  });
+});
+app.get("/api/supabase", exigirLogin, async (_req, res) => {
+  const status = await verificarConexaoSupabase();
+  const cfg = lerConfigSupabase();
+  res.json({ ...cfg, status });
+});
+app.post("/api/supabase", exigirLogin, async (req, res) => {
+  const cfg = salvarConfigSupabase(req.body);
+  const sync = await sincronizarTudoComSupabase();
+  const status = await verificarConexaoSupabase();
+  res.json({ ok: sync.ok, config: cfg, sync, status });
+});
+app.post("/api/supabase/sincronizar", exigirLogin, async (_req, res) => {
+  const sync = await sincronizarTudoComSupabase();
+  const status = await verificarConexaoSupabase();
+  res.json({ ...sync, status });
+});
 app.post("/api/bot/ligar", exigirLogin, async (_req, res) => { await ligarBot(); res.json({ ok: true }); });
 app.post("/api/bot/desligar", exigirLogin, (_req, res) => { desligarBot(); res.json({ ok: true }); });
 app.post("/api/bot/reiniciar", exigirLogin, (_req, res) => { reiniciarProcesso(); res.json({ ok: true }); });
 app.post("/api/processo/encerrar", exigirLogin, (_req, res) => { encerrarProcesso(); res.json({ ok: true }); });
 app.post("/api/bot/qr", exigirLogin, async (_req, res) => { await gerarNovoQr(); res.json({ ok: true }); });
+app.post("/api/bot/novo-qr", exigirLogin, async (_req, res) => { await gerarNovoQr(); res.json({ ok: true }); });
 
-app.post("/api/upload", exigirLogin, upload.single("arquivo"), (req, res) => {
+app.post("/api/upload", exigirLogin, upload.single("arquivo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ erro: "Nenhum arquivo enviado." });
   const extensao = path.extname(req.file.originalname).toLowerCase();
   const destino = path.join("./midia", `${Date.now()}-${req.file.filename}${extensao}`);
   fs.renameSync(req.file.path, destino);
-  res.json({ caminho: destino.replace(/\\/g, "/").replace("./", ""), tipo: /^jpg|jpeg|png|gif|webp$/.test(extensao.slice(1)) ? "imagem" : "video" });
+  const urlPublica = await enviarMidiaParaSupabaseStorage(destino, req.file.mimetype);
+  const caminhoRelativo = destino.replace(/\\/g, "/").replace("./", "");
+  res.json({
+    caminho: urlPublica || caminhoRelativo,
+    caminhoLocal: caminhoRelativo,
+    urlPublica: urlPublica || null,
+    tipo: /^jpg|jpeg|png|gif|webp$/.test(extensao.slice(1)) ? "imagem" : "video"
+  });
 });
 
 app.post("/api/midia/rotacionar", exigirLogin, (_req, res) => res.json({ ok: true }));
-app.get("/api/instalacao", exigirLogin, (_req, res) => res.json({ instalado: true, inicioAuto: false }));
+app.get("/api/instalacao", exigirLogin, (_req, res) => res.json({
+  instalado: true,
+  windows: process.platform === "win32",
+  versaoBiblioteca: "@itsliaaa/baileys",
+  inicioAutomatico: false,
+  atalhoAreaDeTrabalho: false
+}));
 app.post("/api/instalacao/atualizar", exigirLogin, (_req, res) => { reiniciarProcesso(); res.json({ ok: true }); });
 
-app.listen(PORTA, () => console.log(`✅ Sistema pronto. Painel disponível em http://localhost:${PORTA}`));
+app.listen(PORTA, () => {
+  console.log(`✅ Sistema pronto. Painel disponível em http://localhost:${PORTA}`);
+});
 await conectarWhatsApp();
 iniciarScheduler((agendamento) => enviarMensagemGrupos(
   resolverDestinos(agendamento),
   { texto: agendamento.texto || "", midias: agendamento.midias || [] },
   { horario: agendamento.horario, origem: "agendado" }
 ));
+
+// Publica status ao vivo para o Painel Online (GitHub Pages) e processa comandos remotos
+setInterval(() => {
+  const grupos = getGruposRecebidos();
+  publicarStatusVivoNoSupabase({
+    conexaoWhatsapp: statusConexao(),
+    processo: statusProcesso(),
+    qr: getQrAtual(),
+    gruposWhatsapp: Object.entries(grupos).map(([id, grupo]) => ({ id, nome: grupo.subject || id }))
+  });
+}, 5000);
+
+iniciarMonitoramentoComandosSupabase(async (acao, payload) => {
+  if (acao === "ligar") { await ligarBot(); return { ok: true }; }
+  if (acao === "desligar") { desligarBot(); return { ok: true }; }
+  if (acao === "reiniciar") { setTimeout(() => reiniciarProcesso(), 500); return { ok: true }; }
+  if (acao === "encerrar") { setTimeout(() => encerrarProcesso(), 500); return { ok: true }; }
+  if (acao === "qr" || acao === "novo-qr") { await gerarNovoQr(); return { ok: true }; }
+  if (acao === "sincronizar-site") { return await sincronizarSiteNaTriagem(payload?.urlSite); }
+  if (acao === "simular") {
+    const resSim = await simularAtendimentoTriagem(payload?.mensagem, payload?.ia);
+    return { ok: true, ...resSim };
+  }
+  if (acao === "testar" && payload?.id) {
+    const agendamento = lerAgendamentos().find(item => item.id === payload.id);
+    if (!agendamento) throw new Error("Agendamento não encontrado.");
+    const destinos = resolverDestinos(agendamento);
+    if (destinos.length === 0) throw new Error("Este agendamento não possui destinos ativos.");
+    const resultadoEnvio = await enviarMensagemGrupos(
+      destinos,
+      { texto: agendamento.texto || "", midias: agendamento.midias || [] },
+      { horario: agendamento.horario, origem: "teste manual (nuvem)" }
+    );
+    return { ok: true, mensagem: `Teste concluído: ${resultadoEnvio.enviados} enviado(s), ${resultadoEnvio.falhas} falha(s).` };
+  }
+  return { ok: true };
+});

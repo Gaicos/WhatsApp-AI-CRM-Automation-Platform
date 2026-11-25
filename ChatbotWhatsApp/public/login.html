@@ -21,6 +21,7 @@
         </form>
     </div>
 
+    <script src="supabase-bridge.js"></script>
     <script>
         document.getElementById("formLogin").addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -44,7 +45,7 @@
                     erro.textContent = dados.erro || "Não foi possível entrar.";
                     return;
                 }
-                window.location.href = dados.precisaTrocarSenha ? "/trocar-senha.html" : "/";
+                window.location.href = dados.precisaTrocarSenha ? "./trocar-senha.html" : "./";
             } catch {
                 erro.textContent = "Sem conexão com o bot. Ele está rodando?";
             } finally {

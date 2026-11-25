@@ -9,6 +9,27 @@ import { registrarHistorico, lerConfig } from "../services/configService.js";
 import { statusProcesso, reiniciarProcesso } from "../services/processoService.js";
 import { textoHistorico, textoAgendamentos, textoAjuda } from "../services/comandosService.js";
 import { processarTriagem } from "../services/triagemService.js";
+import {
+    useSupabaseAuthState,
+    restaurarAuthWhatsappDoSupabase,
+    salvarCredsWhatsappNoSupabase,
+    limparAuthWhatsappNoSupabase
+} from "../services/supabaseAuthStateService.js";
+import { obterClienteSupabase } from "../services/supabaseService.js";
+
+function deveUsarAuthSupabase() {
+    if (!obterClienteSupabase()) return false;
+    if (process.env.USE_SUPABASE_AUTH === "true") return true;
+    const emNuvem = Boolean(
+        process.env.RENDER ||
+        process.env.KOYEB_APP_NAME ||
+        process.env.RAILWAY_ENVIRONMENT ||
+        process.env.FLY_APP_NAME ||
+        process.env.CLOUD_MODE
+    );
+    if (emNuvem) return true;
+    return Boolean(process.env.SUPABASE_URL) && !fs.existsSync("./auth_info/creds.json");
+}
 
 let sockAtual = null;
 let desligadoManualmente = false;
@@ -59,7 +80,20 @@ export async function conectarWhatsApp() {
     whatsappConectado = false;
     qrAtual = null;
 
-    const { state, saveCreds } = await useMultiFileAuthState("auth_info");
+    const usandoSupabaseAuth = deveUsarAuthSupabase();
+    let state;
+    let saveCreds;
+    if (usandoSupabaseAuth) {
+        const authNuvem = await useSupabaseAuthState();
+        state = authNuvem.state;
+        saveCreds = authNuvem.saveCreds;
+        console.log("☁️ Usando sessão do WhatsApp 100% na nuvem (Supabase).");
+    } else {
+        await restaurarAuthWhatsappDoSupabase("auth_info");
+        const authLocal = await useMultiFileAuthState("auth_info");
+        state = authLocal.state;
+        saveCreds = authLocal.saveCreds;
+    }
     credenciaisAtuais = state.creds;
     const minhaGeracao = ++geracaoAtual;
 
@@ -69,7 +103,12 @@ export async function conectarWhatsApp() {
         : makeWASocket({ auth: state, logger: loggerBaileys });
     sockAtual = sock;
 
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", async () => {
+        await saveCreds();
+        if (!usandoSupabaseAuth) {
+            await salvarCredsWhatsappNoSupabase("auth_info");
+        }
+    });
 
     // Grupos chegam aos poucos durante a sincronização; guarda os que forem recebidos.
     const registrarGrupos = (lista) => {
@@ -100,6 +139,7 @@ export async function conectarWhatsApp() {
             sessaoInvalida = false;
             tentativasFalhas = 0;
             erroConexao = null;
+            salvarCredsWhatsappNoSupabase("auth_info");
             console.log("✅ WhatsApp conectado e pronto para enviar mensagens.");
         }
 
@@ -152,6 +192,7 @@ export async function conectarWhatsApp() {
                 sessaoInvalida = true;
                 // Credenciais já não valem mais: apaga a sessão antiga e gera um QR Code novo.
                 fs.rmSync("./auth_info", { recursive: true, force: true });
+                limparAuthWhatsappNoSupabase();
                 console.log("⚠️ Sessão encerrada pelo WhatsApp. Pasta auth_info removida; gerando novo QR Code...");
                 setTimeout(() => conectarWhatsApp(), 1000);
             }
@@ -257,6 +298,7 @@ export async function gerarNovoQr() {
     if (!credenciaisAtuais?.registered) {
         // ainda não pareado: apaga a tentativa anterior para começar limpo
         fs.rmSync("./auth_info", { recursive: true, force: true });
+        await limparAuthWhatsappNoSupabase();
     }
     await conectarWhatsApp();
 }
@@ -314,6 +356,20 @@ function delayAleatorio(minMs, maxMs) {
     return new Promise(resolve => setTimeout(resolve, tempo));
 }
 
+async function carregarBufferMidia(midia) {
+    const caminho = midia?.caminho || "";
+    const urlRemota = midia?.urlPublica || (/^https?:\/\//i.test(caminho) ? caminho : "");
+    if (caminho && !/^https?:\/\//i.test(caminho) && fs.existsSync(caminho)) {
+        return fs.readFileSync(caminho);
+    }
+    if (urlRemota) {
+        const resp = await fetch(urlRemota);
+        if (!resp.ok) throw new Error(`Falha ao baixar mídia da nuvem (${resp.status})`);
+        return Buffer.from(await resp.arrayBuffer());
+    }
+    return fs.readFileSync(caminho);
+}
+
 // Envio de mensagens e mídias para um grupo
 async function enviarParaGrupo(sock, grupoId, mensagem) {
     const { texto, midias } = mensagem;
@@ -325,7 +381,7 @@ async function enviarParaGrupo(sock, grupoId, mensagem) {
 
     if (midias.length === 1) {
         const midia = midias[0];
-        const buffer = fs.readFileSync(midia.caminho);
+        const buffer = await carregarBufferMidia(midia);
 
         if (midia.tipo === "imagem") {
             await sock.sendMessage(grupoId, { image: buffer, caption: texto });
@@ -336,16 +392,17 @@ async function enviarParaGrupo(sock, grupoId, mensagem) {
         return;
     }
 
-    const itensAlbum = midias.map((midia, index) => {
-        const buffer = fs.readFileSync(midia.caminho);
+    const itensAlbum = [];
+    for (const [index, midia] of midias.entries()) {
+        const buffer = await carregarBufferMidia(midia);
         const caption = index === 0 ? texto : undefined;
 
         if (midia.tipo === "imagem") {
-            return { image: buffer, caption };
+            itensAlbum.push({ image: buffer, caption });
         } else {
-            return { video: buffer, caption };
+            itensAlbum.push({ video: buffer, caption });
         }
-    });
+    }
 
     await sock.sendMessage(grupoId, { album: itensAlbum });
 }

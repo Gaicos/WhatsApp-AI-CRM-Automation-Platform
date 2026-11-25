@@ -1,7 +1,6 @@
-<<<<<<< HEAD
 # 🤖 WhatsApp AI CRM & Automation Platform
 
-Plataforma completa de **Atendimento Inteligente com IA**, **Aprendizado Contínuo (Active Learning)**, **Transbordo para Atendente Humano** e **Automação de Campanhas e Agendamentos no WhatsApp**, controlada 100% por um **Painel Web Moderno** e executada silenciosamente na **Bandeja do Windows (System Tray)** — sem precisar deixar janelas de terminal abertas.
+Plataforma completa de **Atendimento Inteligente com IA**, **Aprendizado Contínuo (Active Learning)**, **Transbordo para Atendente Humano** e **Automação de Campanhas e Agendamentos no WhatsApp**, controlada 100% por um **Painel Web Moderno** — funcionando tanto no seu **PC Windows** quanto **24 horas online na nuvem gratuita (Render + Supabase + UptimeRobot)**, sem precisar deixar o computador ligado!
 
 ---
 
@@ -185,10 +184,26 @@ Para rodar a suíte de testes unitários (autenticação, cálculo de recorrênc
 
 ```bash
 cd ChatbotWhatsApp
-node tests/auth.test.mjs
-node tests/recorrencia.test.mjs
-node tests/triagem.test.mjs
+node --test tests/*.test.mjs
 ```
-=======
-# WhatsApp-AI-CRM-Automation-Platform
->>>>>>> a9e742111c4aebcb2b494c9385b41fcdfabc58ca
+
+---
+
+## ☁️ Modo 24 Horas Online na Nuvem Gratuita (Sem Precisar Ligar o PC)
+
+Para manter o robô respondendo clientes e disparando agendamentos **24h por dia** com custo **R$ 0,00**:
+
+1. **Banco de Dados e Sessão na Nuvem ([Supabase](https://supabase.com/)):**
+   - Crie um projeto gratuito e execute o script [`ChatbotWhatsApp/supabase/schema.sql`](ChatbotWhatsApp/supabase/schema.sql) no SQL Editor.
+   - Ele armazena seus agendamentos, contatos, histórico, triagem IA, imagens/vídeos (`Storage -> midia`) e a sessão do WhatsApp (`whatsapp_auth_state`), evitando perda de conexão ao reiniciar o container.
+2. **Motor 24h Online ([Render](https://render.com/)):**
+   - Crie um **Web Service** conectado a este repositório (o arquivo [`render.yaml`](render.yaml) já vem pré-configurado).
+   - Configure `Root Directory = ChatbotWhatsApp`, `Build Command = npm ci --omit=dev`, `Start Command = node server.js` e adicione as variáveis de ambiente:
+     - `TZ` = `America/Sao_Paulo`
+     - `SUPABASE_URL` = URL do seu projeto Supabase
+     - `SUPABASE_PUBLISHABLE_KEY` = Sua Publishable Key (`sb_publishable_...`)
+3. **Manter Acordado 24h ([UptimeRobot](https://uptimerobot.com/)):**
+   - Crie um monitor HTTP gratuito apontando para `https://SEU-APP.onrender.com/health` a cada **5 minutos** para que o plano gratuito do Render nunca adormeça.
+4. **Pareamento Único:**
+   - Antes de conectar na nuvem, encerre o bot no seu PC (`Encerrar-Bot.bat`) para não haver conflito de sessão.
+   - Acesse o link do Render no navegador, faça login com sua senha e escaneie o QR Code uma única vez. Pronto! Pode desligar o PC.

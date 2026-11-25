@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { promisify } from "node:util";
+import { salvarChaveNoSupabase } from "./supabaseService.js";
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -62,6 +63,7 @@ function lerAuth() {
 
 function salvarAuth(registro) {
     escreverArquivoAtomico(CAMINHO_AUTH, JSON.stringify(registro, null, 2));
+    salvarChaveNoSupabase("auth_painel", registro);
 }
 
 // Cria o usuário padrão na primeira execução. A senha padrão obriga troca no primeiro acesso.
@@ -77,6 +79,14 @@ export async function garantirUsuarioPadrao() {
         const backup = `${CAMINHO_AUTH}.corrompido-${Date.now()}`;
         fs.renameSync(CAMINHO_AUTH, backup);
         console.log(`⚠️ Arquivo de login estava inválido e foi movido para ${backup}. Usuário padrão recriado.`);
+    }
+
+    const senhaEnv = typeof process.env.ADMIN_PASSWORD === "string" ? process.env.ADMIN_PASSWORD : "";
+    if (senhaEnv.length >= 8) {
+        const usuarioEnv = (process.env.ADMIN_USER || USUARIO_PADRAO).trim() || USUARIO_PADRAO;
+        salvarAuth(await montarRegistro(usuarioEnv, senhaEnv, false));
+        console.log(`🔐 Login inicial configurado via variável de ambiente para usuário ${usuarioEnv}.`);
+        return;
     }
 
     salvarAuth(await montarRegistro(USUARIO_PADRAO, SENHA_PADRAO, true));

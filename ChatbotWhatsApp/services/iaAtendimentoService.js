@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { CONHECIMENTO_PADRAO_GAICOS } from "./siteKnowledgeService.js";
+import { salvarChaveNoSupabase } from "./supabaseService.js";
 
 const CAMINHO_APRENDIZADO = "./data/aprendizadoBot.json";
 
@@ -65,6 +66,7 @@ function salvarArquivoAprendizado(dados) {
     const tmp = `${CAMINHO_APRENDIZADO}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(dados, null, 2), "utf-8");
     fs.renameSync(tmp, CAMINHO_APRENDIZADO);
+    salvarChaveNoSupabase("aprendizadoBot", dados);
   } catch {}
 }
 

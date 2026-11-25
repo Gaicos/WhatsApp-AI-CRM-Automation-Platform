@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { lerConfig } from "./configService.js";
+import { salvarChaveNoSupabase } from "./supabaseService.js";
 import { CONHECIMENTO_PADRAO_GAICOS, sincronizarConhecimentoSite } from "./siteKnowledgeService.js";
 import {
   PROMPT_SISTEMA_PADRAO,
@@ -92,6 +93,7 @@ function salvarArquivoAtomico(dados) {
   const temporario = `${CAMINHO}.tmp`;
   fs.writeFileSync(temporario, JSON.stringify(dados, null, 2), "utf-8");
   fs.renameSync(temporario, CAMINHO);
+  salvarChaveNoSupabase("triagem", dados);
 }
 
 function lerPausasArquivo() {
@@ -110,6 +112,7 @@ function salvarPausasArquivo(pausas) {
     const temporario = `${CAMINHO_PAUSAS}.tmp`;
     fs.writeFileSync(temporario, JSON.stringify(pausas, null, 2), "utf-8");
     fs.renameSync(temporario, CAMINHO_PAUSAS);
+    salvarChaveNoSupabase("pausasTriagem", pausas);
   } catch {}
 }
 

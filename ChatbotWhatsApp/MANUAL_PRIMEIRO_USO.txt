@@ -8,14 +8,12 @@ Abra a pasta do sistema e clique duas vezes em:
 Iniciar-Painel.bat
 
 Nao abra nem execute os arquivos .js separadamente.
-O sistema iniciara em segundo plano e ficara visivel na bandeja do Windows (icone "G" verde na setinha ao lado do relogio), sem precisar deixar o CMD aberto na tela.
+O sistema iniciara automaticamente e abrira seu navegador em http://localhost:3000.
+O processo ficara rodando de forma estavel em segundo plano (minimizado na barra de tarefas).
 
-- Clique com o botao esquerdo no icone da bandeja para abrir ou ocultar o terminal do bot.
-- Clique com o botao direito no icone da bandeja para:
-  * Abrir Painel no Navegador (http://localhost:3000)
-  * Mostrar / Ocultar Terminal
-  * Reiniciar Bot
-  * Encerrar Bot
+Para ENCERRAR o Bot a qualquer momento:
+Basta clicar duas vezes em:
+Encerrar-Bot.bat
 
 Na primeira vez, o sistema pode demorar alguns minutos.
 Ele verifica automaticamente se o Node.js esta instalado. Se necessario, instala:
@@ -146,10 +144,9 @@ Para abrir novamente, execute "Iniciar-Painel.bat".
 8. PROBLEMAS COMUNS
 -------------------
 O painel nao abre:
-- confira se o icone do Gaicos Bot esta ativo na bandeja do sistema (ao lado do relogio);
-- aguarde alguns segundos apos iniciar;
-- tente abrir http://localhost:3000 novamente;
-- se necessario, encerre pela bandeja e execute Iniciar-Painel.bat novamente.
+- aguarde alguns segundos apos iniciar para o servidor carregar;
+- tente abrir http://localhost:3000 no navegador;
+- se necessario, execute Encerrar-Bot.bat e depois execute Iniciar-Painel.bat novamente.
 
 O WhatsApp caiu ou pediu reconexao:
 - abra "Status do sistema";

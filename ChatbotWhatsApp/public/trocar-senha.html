@@ -25,6 +25,7 @@
         </form>
     </div>
 
+    <script src="supabase-bridge.js"></script>
     <script>
         document.getElementById("formTroca").addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -46,7 +47,7 @@
                 erro.textContent = dados.erro || "Não foi possível trocar a senha.";
                 return;
             }
-            window.location.href = "/";
+            window.location.href = "./";
         });
     </script>
 </body>
