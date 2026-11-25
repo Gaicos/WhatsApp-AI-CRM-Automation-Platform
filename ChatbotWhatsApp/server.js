@@ -33,6 +33,14 @@ import {
   iniciarMonitoramentoComandosSupabase
 } from "./services/supabaseService.js";
 
+process.on("unhandledRejection", (err) => {
+  console.error("⚠️ Unhandled rejection:", err?.message || err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Uncaught exception:", err?.message || err);
+});
+
 const syncInicial = await Promise.race([
   sincronizarTudoComSupabase(),
   new Promise(resolve => setTimeout(() => resolve({ ok: false, erro: "timeout" }), 6000))
@@ -258,10 +266,14 @@ app.get("/api/instalacao", exigirLogin, (_req, res) => res.json({
 }));
 app.post("/api/instalacao/atualizar", exigirLogin, (_req, res) => { reiniciarProcesso(); res.json({ ok: true }); });
 
-app.listen(PORTA, () => {
+app.listen(PORTA, "0.0.0.0", () => {
   console.log(`✅ Sistema pronto. Painel disponível em http://localhost:${PORTA}`);
 });
-await conectarWhatsApp();
+try {
+  await conectarWhatsApp();
+} catch (err) {
+  console.error("⚠️ Falha inicial ao conectar WhatsApp:", err?.message || err);
+}
 iniciarScheduler((agendamento) => enviarMensagemGrupos(
   resolverDestinos(agendamento),
   { texto: agendamento.texto || "", midias: agendamento.midias || [] },

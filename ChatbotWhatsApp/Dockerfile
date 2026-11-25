@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 RUN apk add --no-cache tzdata
 ENV TZ=America/Sao_Paulo
@@ -6,7 +6,7 @@ ENV TZ=America/Sao_Paulo
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev --legacy-peer-deps
 
 COPY . .
 
