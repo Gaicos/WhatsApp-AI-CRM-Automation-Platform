@@ -464,3 +464,66 @@ export async function enviarMensagemGrupos(grupos, mensagem, contexto = {}) {
     console.log("🏁 Envio para todos os grupos concluído.");
     return resultado;
 }
+
+/**
+ * Envia uma mensagem direta (texto ou mídia por URL pública) para um número ou JID de grupo.
+ * Usada pelo Webhook de integração com o site e alertas no Grupo de Controle.
+ */
+export async function enviarMensagemDireta(destino, { texto = "", midiaUrl = "", tipoMidia = "imagem" } = {}, contexto = {}) {
+    const sock = getSock();
+    if (!sock || !whatsappConectado) {
+        throw new Error("WhatsApp não conectado.");
+    }
+
+    let jid = String(destino || "").trim();
+    if (!jid) {
+        throw new Error("Destino de WhatsApp não informado.");
+    }
+
+    if (!jid.includes("@")) {
+        const digits = jid.replace(/\D/g, "");
+        if (digits.length < 10 || digits.length > 15) {
+            throw new Error("Número de telefone inválido para envio no WhatsApp.");
+        }
+        jid = `${digits}@s.whatsapp.net`;
+        try {
+            const verificado = await sock.onWhatsApp(digits);
+            if (Array.isArray(verificado) && verificado[0]?.jid) {
+                jid = verificado[0].jid;
+            }
+        } catch {}
+    }
+
+    try {
+        if (midiaUrl) {
+            const buffer = await carregarBufferMidia({ caminho: midiaUrl, urlPublica: midiaUrl });
+            const payloadMidia = tipoMidia === "video"
+                ? { video: buffer, caption: texto || undefined }
+                : { image: buffer, caption: texto || undefined };
+            await sock.sendMessage(jid, payloadMidia);
+        } else {
+            await sock.sendMessage(jid, { text: texto });
+        }
+
+        registrarHistorico({
+            data: new Date().toISOString(),
+            horario: contexto.horario || null,
+            origem: contexto.origem || "webhook",
+            grupo: contexto.nomeDestino || String(destino),
+            sucesso: true,
+            erro: null
+        });
+
+        return { ok: true, jid };
+    } catch (err) {
+        registrarHistorico({
+            data: new Date().toISOString(),
+            horario: contexto.horario || null,
+            origem: contexto.origem || "webhook",
+            grupo: contexto.nomeDestino || String(destino),
+            sucesso: false,
+            erro: err.message
+        });
+        throw err;
+    }
+}

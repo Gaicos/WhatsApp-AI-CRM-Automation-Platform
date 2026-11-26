@@ -15,7 +15,9 @@ const MAPA_ARQUIVOS_CHAVES = {
   triagem: "./data/triagem.json",
   aprendizadoBot: "./data/aprendizadoBot.json",
   pausasTriagem: "./data/pausasTriagem.json",
-  auth_painel: "./data/auth.json"
+  auth_painel: "./data/auth.json",
+  webhooksConfig: "./data/webhooks.json",
+  webhooksEventos: "./data/webhooksEventos.json"
 };
 
 let clienteCache = null;

@@ -12,6 +12,7 @@
         <nav class="abas">
             <button type="button" class="aba-botao ativa" data-aba="agendamentos">📅 Agendamentos</button>
             <button type="button" class="aba-botao" data-aba="triagem">🧭 Triagem & IA do Site</button>
+            <button type="button" class="aba-botao" data-aba="webhooks">🔗 Integração Site</button>
             <button type="button" class="aba-botao" data-aba="status">⚙️ Status do sistema</button>
             <a href="./trocar-senha.html" class="link-botao">🔑 Trocar senha</a>
             <button type="button" id="btnSair" class="aba-botao">🚪 Sair</button>
@@ -275,6 +276,115 @@
             </details>
         </section>
 
+        <section id="abaWebhooks" class="aba oculto">
+            <div class="cartao-status">
+                <div class="cartao-status-linha">
+                    <div>
+                        <label class="check-ativo" style="font-size:1.05em; font-weight:700;">
+                            <input type="checkbox" id="webhookAtivo" checked> Ativar recebimento de webhooks do site
+                        </label>
+                        <p class="texto-ajuda" style="margin:6px 0 0 0;">
+                            Permite que o seu site envie pedidos, pagamentos, códigos de rastreio e orçamentos em tempo real para notificar o cliente automaticamente no WhatsApp.
+                        </p>
+                    </div>
+                    <button type="button" id="btnSalvarWebhook" class="botao-primario">💾 Salvar configuração</button>
+                </div>
+
+                <div style="margin-top:14px;">
+                    <label class="rotulo">URL do Webhook (Endpoint para o programador do site)</label>
+                    <div class="linha-acoes" style="margin-top:4px;">
+                        <input type="text" id="webhookUrlEndpoint" readonly style="margin:0; flex:1; background:#f8fafc; font-family:monospace;">
+                        <button type="button" id="btnCopiarWebhookUrl" class="botao-secundario">📋 Copiar URL</button>
+                    </div>
+                </div>
+
+                <div style="margin-top:12px;">
+                    <label class="rotulo">Token Secreto de Segurança (<code>X-Webhook-Secret</code>)</label>
+                    <div class="linha-acoes" style="margin-top:4px;">
+                        <input type="password" id="webhookSegredo" readonly style="margin:0; flex:1; background:#f8fafc; font-family:monospace;">
+                        <button type="button" id="btnMostrarWebhookSegredo" class="botao-secundario">👁️ Mostrar</button>
+                        <button type="button" id="btnCopiarWebhookSegredo" class="botao-secundario">📋 Copiar Token</button>
+                        <button type="button" id="btnRegenerarWebhookSegredo" class="botao-perigo">🔄 Gerar novo token</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cartao-status">
+                <div class="cartao-status-linha" style="margin-bottom:8px;">
+                    <h3 style="margin:0;">👨‍💻 Instruções Prontas para o Programador do Site</h3>
+                    <button type="button" id="btnCopiarGuiaProgramador" class="botao-primario">📋 Copiar instruções completas</button>
+                </div>
+                <p class="texto-ajuda" style="margin-top:0;">
+                    Copie e envie o bloco abaixo para o desenvolvedor do seu site. O sistema aceita requisições <code>POST</code> com JSON autenticado pelo header <code>X-Webhook-Secret</code>.
+                </p>
+                <pre id="preGuiaProgramador" style="background:#0f172a; color:#e2e8f0; padding:14px; border-radius:10px; overflow-x:auto; font-size:0.84em; line-height:1.45; margin:0;"></pre>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">✉️ Mensagens Automáticas por Evento do Site</h3>
+                <p class="texto-ajuda" style="margin-top:0;">
+                    Personalize o texto enviado ao cliente para cada evento. Variáveis disponíveis:
+                    <code>{{nome}}</code>, <code>{{pedido}}</code>, <code>{{valor}}</code>, <code>{{status}}</code>, <code>{{rastreio}}</code>, <code>{{link}}</code>, <code>{{produtos}}</code>, <code>{{mensagem}}</code>.
+                </p>
+                <div id="listaEventosWebhook"></div>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">🧪 Testar Webhook Agora</h3>
+                <p class="texto-ajuda" style="margin-top:0;">
+                    Simule um disparo igual ao que o site fará, enviando uma mensagem real pelo WhatsApp para validar seu template.
+                </p>
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px;">
+                    <div>
+                        <label class="rotulo">Evento</label>
+                        <select id="testeWebhookEvento" style="width:100%; padding:10px 12px; margin:6px 0; border:1px solid var(--borda); border-radius:8px;"></select>
+                    </div>
+                    <div>
+                        <label class="rotulo">Telefone / WhatsApp (DDI + DDD)</label>
+                        <input type="text" id="testeWebhookTelefone" placeholder="5511999999999">
+                    </div>
+                    <div>
+                        <label class="rotulo">Nome do cliente</label>
+                        <input type="text" id="testeWebhookNome" placeholder="Ex: João">
+                    </div>
+                    <div>
+                        <label class="rotulo">Número do pedido</label>
+                        <input type="text" id="testeWebhookPedido" placeholder="Ex: 1042">
+                    </div>
+                    <div>
+                        <label class="rotulo">Valor</label>
+                        <input type="text" id="testeWebhookValor" placeholder="Ex: 149.90">
+                    </div>
+                    <div>
+                        <label class="rotulo">Código de rastreio (opcional)</label>
+                        <input type="text" id="testeWebhookRastreio" placeholder="Ex: BR123456789BR">
+                    </div>
+                </div>
+                <label class="rotulo">Link do pedido / carrinho (opcional)</label>
+                <input type="url" id="testeWebhookLink" placeholder="https://www.gaicos-store.com.br/pedido/1042">
+                <label class="rotulo">Mensagem livre (usada no evento "mensagem" ou como fallback)</label>
+                <textarea id="testeWebhookMensagem" rows="2" placeholder="Ex: Oi João! Seu playmat ficou pronto!"></textarea>
+                <button type="button" id="btnTestarWebhook" class="botao-alerta">🚀 Enviar Teste pelo WhatsApp</button>
+                <div id="resultadoTesteWebhook" class="oculto" style="margin-top:12px; padding:12px; border-radius:8px; font-size:0.9em; border:1px solid var(--borda);"></div>
+            </div>
+
+            <div class="cartao-status">
+                <div class="cartao-status-linha" style="margin-bottom:10px;">
+                    <h3 style="margin:0;">📜 Últimos Webhooks Recebidos</h3>
+                    <div class="botoes-controle">
+                        <button type="button" id="btnAtualizarEventosWebhook" class="botao-secundario">🔄 Atualizar</button>
+                        <button type="button" id="btnLimparEventosWebhook" class="botao-perigo">🗑️ Limpar</button>
+                    </div>
+                </div>
+                <table class="tabela-historico">
+                    <thead>
+                        <tr><th>Quando</th><th>Evento</th><th>Cliente / Telefone</th><th>Pedido</th><th>Status</th><th>Detalhe</th></tr>
+                    </thead>
+                    <tbody id="corpoEventosWebhook"></tbody>
+                </table>
+            </div>
+        </section>
+
         <section id="abaStatus" class="aba oculto">
             <div class="cartao-status">
                 <div class="cartao-status-linha">
@@ -285,8 +395,8 @@
                     <div class="botoes-controle">
                         <button type="button" id="btnLigarBot" class="botao-primario">▶️ Ligar</button>
                         <button type="button" id="btnDesligarBot" class="botao-perigo">⏸️ Desligar</button>
-                        <button type="button" id="btnReiniciarBot" class="botao-secundario">🔄 Reiniciar programa</button>
-                        <button type="button" id="btnEncerrarPrograma" class="botao-perigo">⏹️ Encerrar programa</button>
+                        <button type="button" id="btnReiniciarBot" class="botao-secundario">🔄 Reiniciar servidor</button>
+                        <button type="button" id="btnNovoQrPainel" class="botao-secundario">📱 Trocar WhatsApp / QR</button>
                     </div>
                 </div>
 
@@ -333,22 +443,6 @@
                     <button type="button" id="btnSalvarGrupoControle" class="botao-primario">Salvar</button>
                 </div>
                 <p id="grupoControleAtual" style="font-size:0.88em; color:#667781;"></p>
-            </div>
-
-            <div class="cartao-status">
-                <h3 style="margin-top:0;">🧰 Programa e instalação</h3>
-                <p class="texto-ajuda">Tudo pode ser feito por aqui, sem terminal.</p>
-                <p id="infoInstalacao" class="status-login">Carregando...</p>
-                <div class="linha-acoes">
-                    <label class="check-ativo"><input type="checkbox" id="chkInicioAuto"> Iniciar automaticamente com o Windows</label>
-                </div>
-                <div class="linha-acoes">
-                    <label class="check-ativo"><input type="checkbox" id="chkAtalhoDesktop"> Atalho na área de trabalho</label>
-                </div>
-                <div class="botoes-controle">
-                    <button type="button" id="btnAtualizarBiblioteca" class="botao-secundario">⬆️ Atualizar biblioteca do WhatsApp</button>
-                    <button type="button" id="btnDesinstalar" class="botao-perigo">🗑️ Desinstalar programa</button>
-                </div>
             </div>
 
             <div class="cabecalho-secao">
@@ -466,5 +560,6 @@
     <script src="supabase-bridge.js"></script>
     <script src="app.js"></script>
     <script src="triagem.js"></script>
+    <script src="webhooks.js"></script>
 </body>
 </html>

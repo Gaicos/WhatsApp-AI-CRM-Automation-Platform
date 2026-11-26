@@ -13,10 +13,20 @@ import {
 } from "./services/authService.js";
 import {
   conectarWhatsApp, ligarBot, desligarBot, statusConexao, getQrAtual, getGruposRecebidos,
-  gerarNovoQr, sairDoWhatsapp, enviarMensagemGrupos
+  gerarNovoQr, sairDoWhatsapp, enviarMensagemGrupos, enviarMensagemDireta
 } from "./whatsapp/whatsappService.js";
 import { iniciarScheduler } from "./scheduler/scheduler.js";
-import { encerrarProcesso, reiniciarProcesso, statusProcesso } from "./services/processoService.js";
+import { reiniciarProcesso, statusProcesso } from "./services/processoService.js";
+import {
+  lerConfigWebhook,
+  salvarConfigWebhook,
+  regenerarSegredoWebhook,
+  validarSegredoWebhook,
+  extrairTokenRequisicao,
+  lerEventosWebhook,
+  limparEventosWebhook,
+  processarWebhookSite
+} from "./services/webhookService.js";
 import {
   lerTriagem, salvarTriagem, validarTriagem, sincronizarSiteNaTriagem,
   simularAtendimentoTriagem, listarPausasHumano, reativarAtendimentoBot,
@@ -237,9 +247,67 @@ app.post("/api/supabase/sincronizar", exigirLogin, async (_req, res) => {
 app.post("/api/bot/ligar", exigirLogin, async (_req, res) => { await ligarBot(); res.json({ ok: true }); });
 app.post("/api/bot/desligar", exigirLogin, (_req, res) => { desligarBot(); res.json({ ok: true }); });
 app.post("/api/bot/reiniciar", exigirLogin, (_req, res) => { reiniciarProcesso(); res.json({ ok: true }); });
-app.post("/api/processo/encerrar", exigirLogin, (_req, res) => { encerrarProcesso(); res.json({ ok: true }); });
 app.post("/api/bot/qr", exigirLogin, async (_req, res) => { await gerarNovoQr(); res.json({ ok: true }); });
 app.post("/api/bot/novo-qr", exigirLogin, async (_req, res) => { await gerarNovoQr(); res.json({ ok: true }); });
+
+// ----------------- WEBHOOK DO SITE (CHAMADO PELO PROGRAMADOR) -----------------
+app.get("/api/webhook/ping", (req, res) => {
+  const token = extrairTokenRequisicao(req);
+  if (!validarSegredoWebhook(token)) {
+    return res.status(401).json({ ok: false, erro: "Token de webhook inválido ou ausente. Envie no header X-Webhook-Secret." });
+  }
+  const cfg = lerConfigWebhook();
+  res.json({
+    ok: true,
+    ativo: cfg.ativo,
+    whatsappConectado: !!statusConexao().conectado,
+    eventosSuportados: Object.keys(cfg.eventos),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.post("/api/webhook/site", async (req, res) => {
+  const token = extrairTokenRequisicao(req);
+  if (!validarSegredoWebhook(token)) {
+    return res.status(401).json({ ok: false, erro: "Token de webhook inválido ou ausente. Envie no header X-Webhook-Secret." });
+  }
+  try {
+    const resultado = await processarWebhookSite(req.body, enviarMensagemDireta);
+    const statusHttp = resultado.statusHttp || (resultado.ok === false ? 400 : 200);
+    return res.status(statusHttp).json(resultado);
+  } catch (err) {
+    const desconectado = /não conectado/i.test(err?.message || "");
+    return res.status(desconectado ? 503 : 500).json({ ok: false, erro: err?.message || "Erro ao processar webhook." });
+  }
+});
+
+// ----------------- CONFIGURAÇÃO WEBHOOKS NO PAINEL ADMIN -----------------
+app.get("/api/webhooks/config", exigirLogin, (_req, res) => res.json(lerConfigWebhook()));
+app.post("/api/webhooks/config", exigirLogin, (req, res) => {
+  try {
+    res.json({ ok: true, config: salvarConfigWebhook(req.body) });
+  } catch (err) {
+    res.status(400).json({ ok: false, erro: err.message });
+  }
+});
+app.post("/api/webhooks/regenerar-segredo", exigirLogin, (_req, res) => {
+  res.json({ ok: true, config: regenerarSegredoWebhook() });
+});
+app.get("/api/webhooks/eventos", exigirLogin, (_req, res) => res.json(lerEventosWebhook()));
+app.post("/api/webhooks/eventos/limpar", exigirLogin, (_req, res) => {
+  limparEventosWebhook();
+  res.json({ ok: true });
+});
+app.post("/api/webhooks/testar", exigirLogin, async (req, res) => {
+  try {
+    const resultado = await processarWebhookSite(req.body, enviarMensagemDireta);
+    const statusHttp = resultado.statusHttp || (resultado.ok === false ? 400 : 200);
+    res.status(statusHttp).json(resultado);
+  } catch (err) {
+    const desconectado = /não conectado/i.test(err?.message || "");
+    res.status(desconectado ? 503 : 500).json({ ok: false, erro: err?.message || "Falha ao testar webhook." });
+  }
+});
 
 app.post("/api/upload", exigirLogin, upload.single("arquivo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ erro: "Nenhum arquivo enviado." });
@@ -257,14 +325,6 @@ app.post("/api/upload", exigirLogin, upload.single("arquivo"), async (req, res) 
 });
 
 app.post("/api/midia/rotacionar", exigirLogin, (_req, res) => res.json({ ok: true }));
-app.get("/api/instalacao", exigirLogin, (_req, res) => res.json({
-  instalado: true,
-  windows: process.platform === "win32",
-  versaoBiblioteca: "@itsliaaa/baileys",
-  inicioAutomatico: false,
-  atalhoAreaDeTrabalho: false
-}));
-app.post("/api/instalacao/atualizar", exigirLogin, (_req, res) => { reiniciarProcesso(); res.json({ ok: true }); });
 
 app.listen(PORTA, "0.0.0.0", () => {
   console.log(`✅ Sistema pronto. Painel disponível em http://localhost:${PORTA}`);
@@ -295,8 +355,8 @@ iniciarMonitoramentoComandosSupabase(async (acao, payload) => {
   if (acao === "ligar") { await ligarBot(); return { ok: true }; }
   if (acao === "desligar") { desligarBot(); return { ok: true }; }
   if (acao === "reiniciar") { setTimeout(() => reiniciarProcesso(), 500); return { ok: true }; }
-  if (acao === "encerrar") { setTimeout(() => encerrarProcesso(), 500); return { ok: true }; }
   if (acao === "qr" || acao === "novo-qr") { await gerarNovoQr(); return { ok: true }; }
+  if (acao === "testar-webhook") { return await processarWebhookSite(payload || {}, enviarMensagemDireta); }
   if (acao === "sincronizar-site") { return await sincronizarSiteNaTriagem(payload?.urlSite); }
   if (acao === "simular") {
     const resSim = await simularAtendimentoTriagem(payload?.mensagem, payload?.ia);

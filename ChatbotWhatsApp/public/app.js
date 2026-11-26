@@ -62,7 +62,12 @@ document.querySelectorAll(".aba-botao").forEach(botao => {
         const aba = botao.dataset.aba;
         document.getElementById("abaAgendamentos").classList.toggle("oculto", aba !== "agendamentos");
         document.getElementById("abaTriagem").classList.toggle("oculto", aba !== "triagem");
+        document.getElementById("abaWebhooks")?.classList.toggle("oculto", aba !== "webhooks");
         document.getElementById("abaStatus").classList.toggle("oculto", aba !== "status");
+
+        if (aba === "webhooks") {
+            window.carregarPainelWebhooks?.();
+        }
 
         if (aba === "status") {
             atualizarStatus();
@@ -117,9 +122,9 @@ document.getElementById("btnDesligarBot").addEventListener("click", async () => 
 });
 
 document.getElementById("btnReiniciarBot").addEventListener("click", async () => {
-    if (!confirm("Reiniciar o programa? Leva alguns segundos.")) return;
+    if (!confirm("Reiniciar o servidor na nuvem? Leva alguns segundos.")) return;
     fetch("/api/bot/reiniciar", { method: "POST" }).catch(() => {});
-    mostrarToast("Reiniciando...");
+    mostrarToast("Servidor reiniciando. Recarregue a página em alguns segundos.");
     await new Promise(r => setTimeout(r, 4000));
     for (let i = 0; i < 30; i++) {
         try {
@@ -128,16 +133,12 @@ document.getElementById("btnReiniciarBot").addEventListener("click", async () =>
         } catch { /* ainda reiniciando */ }
         await new Promise(r => setTimeout(r, 1000));
     }
-    mostrarToast("Não voltou. Clique em Iniciar Painel.", "erro");
+    mostrarToast("Servidor reiniciando. Recarregue a página em alguns segundos.", "erro");
 });
 
-document.getElementById("btnEncerrarPrograma").addEventListener("click", async () => {
-    if (!confirm("Encerrar o programa? O bot para até você abrir o Iniciar Painel de novo.")) return;
-    await fetch("/api/processo/encerrar", { method: "POST" }).catch(() => {});
-    document.body.innerHTML = `<div class="pagina-login"><div class="caixa-login">
-        <h2>Programa encerrado</h2>
-        <p class="texto-ajuda">Para abrir de novo, clique duas vezes em <strong>Iniciar Painel</strong>.</p>
-    </div></div>`;
+document.getElementById("btnNovoQrPainel").addEventListener("click", () => {
+    if (!confirm("Abrir tela de conexão / QR Code?")) return;
+    window.location.href = "./conectar.html";
 });
 
 async function carregarHistorico() {
@@ -1008,89 +1009,3 @@ async function iniciarPagina() {
 }
 
 iniciarPagina();
-
-// ================= PROGRAMA E INSTALAÇÃO =================
-
-async function carregarInstalacao() {
-    const info = await fetch("/api/instalacao").then(r => r.json());
-    const texto = document.getElementById("infoInstalacao");
-    texto.textContent = info.windows
-        ? `Versão da biblioteca do WhatsApp: ${info.versaoBiblioteca}`
-        : `Versão da biblioteca do WhatsApp: ${info.versaoBiblioteca}. Início automático e atalho só funcionam no Windows.`;
-    document.getElementById("chkInicioAuto").checked = info.inicioAutomatico;
-    document.getElementById("chkInicioAuto").disabled = !info.windows;
-    document.getElementById("chkAtalhoDesktop").checked = info.atalhoAreaDeTrabalho;
-    document.getElementById("chkAtalhoDesktop").disabled = !info.windows;
-}
-
-async function postarInstalacao(caminho, corpo) {
-    const resposta = await fetch(caminho, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(corpo),
-    });
-    const dados = await resposta.json().catch(() => ({}));
-    if (!resposta.ok) throw new Error(dados.erro || "Não foi possível concluir.");
-    return dados;
-}
-
-document.getElementById("chkInicioAuto").addEventListener("change", async (e) => {
-    try {
-        await postarInstalacao("/api/instalacao/inicio", { ativo: e.target.checked });
-        mostrarToast(e.target.checked ? "O programa vai abrir sozinho ao ligar o Windows" : "Início automático desligado");
-    } catch (err) {
-        e.target.checked = !e.target.checked;
-        mostrarToast(err.message, "erro");
-    }
-});
-
-document.getElementById("chkAtalhoDesktop").addEventListener("change", async (e) => {
-    try {
-        await postarInstalacao("/api/instalacao/atalho", { ativo: e.target.checked });
-        mostrarToast(e.target.checked ? "Atalho criado na área de trabalho" : "Atalho removido");
-    } catch (err) {
-        e.target.checked = !e.target.checked;
-        mostrarToast(err.message, "erro");
-    }
-});
-
-async function esperarProgramaVoltar() {
-    await new Promise(r => setTimeout(r, 5000));
-    for (let i = 0; i < 300; i++) {
-        try {
-            const resposta = await fetch("/api/sessao");
-            if (resposta.ok) { location.reload(); return; }
-        } catch { /* ainda reiniciando */ }
-        await new Promise(r => setTimeout(r, 1000));
-    }
-    mostrarToast("O programa não voltou. Clique em Iniciar Painel.", "erro");
-}
-
-document.getElementById("btnAtualizarBiblioteca").addEventListener("click", async () => {
-    if (!confirm("Atualizar a biblioteca do WhatsApp? O programa vai reiniciar e pode levar alguns minutos.")) return;
-    fetch("/api/instalacao/atualizar", { method: "POST" }).catch(() => {});
-    document.body.innerHTML = `<div class="pagina-login"><div class="caixa-login">
-        <h2>Atualizando...</h2>
-        <p class="texto-ajuda">Isso pode levar alguns minutos. Esta tela volta sozinha.</p>
-    </div></div>`;
-    await esperarProgramaVoltar();
-});
-
-document.getElementById("btnDesinstalar").addEventListener("click", async () => {
-    if (!confirm("Desinstalar o programa? O bot para, o início automático é removido e este computador sai da conta do WhatsApp.")) return;
-    const digitado = prompt("Para confirmar, digite DESINSTALAR (em maiúsculas):");
-    if (digitado !== "DESINSTALAR") { mostrarToast("Desinstalação cancelada", "erro"); return; }
-    const apagarDados = confirm("Apagar também os dados (agendamentos, contatos, fotos, login e conexão do WhatsApp)?\n\nOK = sim, apagar tudo.\nCancelar = manter os dados.");
-    try {
-        await postarInstalacao("/api/instalacao/desinstalar", { confirmacao: digitado, apagarDados });
-    } catch (err) {
-        mostrarToast(err.message, "erro");
-        return;
-    }
-    document.body.innerHTML = `<div class="pagina-login"><div class="caixa-login">
-        <h2>Programa desinstalado</h2>
-        <p class="texto-ajuda">Agora você pode apagar a pasta do programa no seu computador.</p>
-    </div></div>`;
-});
-
-carregarInstalacao();

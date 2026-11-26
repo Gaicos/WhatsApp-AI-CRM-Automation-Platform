@@ -348,20 +348,26 @@
           const resCmd = await enfileirarComandoRemoto("simular", corpo || {}, 15000);
           return respostaJson(resCmd, resCmd.ok === false ? 400 : 200);
         }
+        if (urlStr === "/api/webhooks/config") {
+          if (metodo === "GET") return respostaJson(await lerChaveKv("webhooksConfig", { ativo: true, segredo: "", eventos: {} }));
+          await salvarChaveKv("webhooksConfig", corpo || {});
+          return respostaJson({ ok: true, config: corpo || {} });
+        }
+        if (urlStr === "/api/webhooks/eventos") {
+          return respostaJson(await lerChaveKv("webhooksEventos", []));
+        }
+        if (urlStr === "/api/webhooks/eventos/limpar") {
+          await salvarChaveKv("webhooksEventos", []);
+          return respostaJson({ ok: true });
+        }
+        if (urlStr === "/api/webhooks/testar") {
+          const resCmd = await enfileirarComandoRemoto("testar-webhook", corpo || {}, 15000);
+          return respostaJson(resCmd, resCmd.ok === false ? 400 : 200);
+        }
         if (urlStr === "/api/bot/ligar") return respostaJson(await enfileirarComandoRemoto("ligar"));
         if (urlStr === "/api/bot/desligar") return respostaJson(await enfileirarComandoRemoto("desligar"));
         if (urlStr === "/api/bot/reiniciar") return respostaJson(await enfileirarComandoRemoto("reiniciar"));
-        if (urlStr === "/api/processo/encerrar") return respostaJson(await enfileirarComandoRemoto("encerrar"));
         if (urlStr === "/api/bot/qr" || urlStr === "/api/bot/novo-qr") return respostaJson(await enfileirarComandoRemoto("qr"));
-        if (urlStr === "/api/instalacao") {
-          return respostaJson({
-            instalado: true,
-            windows: false,
-            versaoBiblioteca: "nuvem",
-            inicioAutomatico: false,
-            atalhoAreaDeTrabalho: false
-          });
-        }
       } catch (err) {
         return respostaJson({ ok: false, erro: err.message }, 500);
       }
