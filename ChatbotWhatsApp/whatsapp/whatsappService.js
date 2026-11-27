@@ -407,7 +407,46 @@ async function enviarParaGrupo(sock, grupoId, mensagem) {
     await sock.sendMessage(grupoId, { album: itensAlbum });
 }
 
-// Envio para vários grupos
+/**
+ * Resolve o JID válido do WhatsApp a partir de um objeto (grupo ou contato) ou número em string.
+ * Suporta contatos legados cujo `id` é um timestamp numérico sem `@s.whatsapp.net`.
+ */
+export async function resolverJidDestino(sock, destino) {
+    const ehObjeto = destino && typeof destino === "object";
+    const idBruto = ehObjeto ? String(destino.id || "").trim() : String(destino || "").trim();
+
+    if (idBruto.includes("@")) {
+        return idBruto;
+    }
+
+    const candidato = ehObjeto ? String(destino.telefone || destino.id || "").trim() : idBruto;
+    let digits = candidato.replace(/\D/g, "");
+    if (!digits) {
+        throw new Error("Destino de WhatsApp não informado.");
+    }
+    if (digits.startsWith("0") && (digits.length === 11 || digits.length === 12)) {
+        digits = digits.slice(1);
+    }
+    if (digits.length === 10 || digits.length === 11) {
+        digits = `55${digits}`;
+    }
+    if (digits.length < 10 || digits.length > 15) {
+        throw new Error("Número de telefone inválido para envio no WhatsApp.");
+    }
+
+    let jid = `${digits}@s.whatsapp.net`;
+    if (sock && typeof sock.onWhatsApp === "function") {
+        try {
+            const verificado = await sock.onWhatsApp(digits);
+            if (Array.isArray(verificado) && verificado[0]?.jid) {
+                jid = verificado[0].jid;
+            }
+        } catch {}
+    }
+    return jid;
+}
+
+// Envio para vários grupos e contatos
 export async function enviarMensagemGrupos(grupos, mensagem, contexto = {}) {
     const resultado = { enviados: 0, falhas: 0 };
     for (const grupo of grupos) {
@@ -430,7 +469,8 @@ export async function enviarMensagemGrupos(grupos, mensagem, contexto = {}) {
         }
 
         try {
-            await enviarParaGrupo(sock, grupo.id, mensagem);
+            const jidDestino = await resolverJidDestino(sock, grupo);
+            await enviarParaGrupo(sock, jidDestino, mensagem);
 
             console.log(`[${new Date().toLocaleTimeString()}] ✅ Enviado para: ${grupo.nome}`);
 
@@ -475,24 +515,7 @@ export async function enviarMensagemDireta(destino, { texto = "", midiaUrl = "",
         throw new Error("WhatsApp não conectado.");
     }
 
-    let jid = String(destino || "").trim();
-    if (!jid) {
-        throw new Error("Destino de WhatsApp não informado.");
-    }
-
-    if (!jid.includes("@")) {
-        const digits = jid.replace(/\D/g, "");
-        if (digits.length < 10 || digits.length > 15) {
-            throw new Error("Número de telefone inválido para envio no WhatsApp.");
-        }
-        jid = `${digits}@s.whatsapp.net`;
-        try {
-            const verificado = await sock.onWhatsApp(digits);
-            if (Array.isArray(verificado) && verificado[0]?.jid) {
-                jid = verificado[0].jid;
-            }
-        } catch {}
-    }
+    const jid = await resolverJidDestino(sock, destino);
 
     try {
         if (midiaUrl) {

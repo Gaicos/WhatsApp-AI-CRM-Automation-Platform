@@ -203,15 +203,27 @@
         }
         if (urlStr === "/api/contatos/adicionar") {
           const contatos = await lerChaveKv("contatos", []);
+          const nome = String(corpo?.nome || "").trim();
+          let telefone = String(corpo?.telefone || "").replace(/\D/g, "");
+          if (telefone.startsWith("0") && (telefone.length === 11 || telefone.length === 12)) {
+            telefone = telefone.slice(1);
+          }
+          if (telefone.length === 10 || telefone.length === 11) {
+            telefone = "55" + telefone;
+          }
+          if (!nome || telefone.length < 10 || telefone.length > 15) {
+            return respostaJson({ erro: "Nome e telefone válidos são obrigatórios (ex: 5511999999999)." }, 400);
+          }
+          const id = `${telefone}@s.whatsapp.net`;
           const novo = {
-            id: corpo?.id || Date.now().toString(),
-            nome: String(corpo?.nome || "").trim(),
-            telefone: String(corpo?.telefone || "").trim(),
+            id,
+            nome,
+            telefone,
             ativo: corpo?.ativo !== false
           };
           contatos.unshift(novo);
           await salvarChaveKv("contatos", contatos);
-          return respostaJson(novo);
+          return respostaJson({ ok: true, contato: novo });
         }
         if (urlStr === "/api/listas-contatos") {
           if (metodo === "GET") return respostaJson(await lerChaveKv("listasContatos", []));

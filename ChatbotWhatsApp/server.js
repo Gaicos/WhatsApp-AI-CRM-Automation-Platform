@@ -23,6 +23,7 @@ import {
   regenerarSegredoWebhook,
   validarSegredoWebhook,
   extrairTokenRequisicao,
+  normalizarTelefoneWhatsapp,
   lerEventosWebhook,
   limparEventosWebhook,
   processarWebhookSite
@@ -116,9 +117,20 @@ app.get("/api/grupos-whatsapp", exigirLogin, async (_req, res) => {
 app.get("/api/contatos", exigirLogin, (_req, res) => res.json(lerContatos()));
 app.post("/api/contatos/adicionar", exigirLogin, (req, res) => {
   const contatos = lerContatos();
-  const contato = { id: req.body.id || Date.now().toString(), nome: String(req.body.nome || "").trim(), telefone: String(req.body.telefone || "").trim(), ativo: req.body.ativo !== false };
-  if (!contato.nome || !/^\d{10,15}$/.test(contato.telefone)) return res.status(400).json({ erro: "Nome e telefone válidos são obrigatórios." });
-  contatos.unshift(contato); salvarContatos(contatos); res.json(contato);
+  const nome = String(req.body?.nome || "").trim();
+  const telefone = normalizarTelefoneWhatsapp(req.body?.telefone);
+  if (!nome || !telefone) {
+    return res.status(400).json({ erro: "Nome e telefone válidos são obrigatórios (ex: 5511999999999)." });
+  }
+  const id = `${telefone}@s.whatsapp.net`;
+  const duplicado = contatos.some(c => c.id === id || normalizarTelefoneWhatsapp(c.telefone) === telefone);
+  if (duplicado) {
+    return res.status(400).json({ erro: "Este contato já está cadastrado." });
+  }
+  const contato = { id, nome, telefone, ativo: req.body?.ativo !== false };
+  contatos.unshift(contato);
+  salvarContatos(contatos);
+  res.json({ ok: true, contato });
 });
 app.post("/api/contatos", exigirLogin, (req, res) => { salvarContatos(req.body); res.json({ ok: true }); });
 app.get("/api/listas-contatos", exigirLogin, (_req, res) => res.json(lerListasContatos()));

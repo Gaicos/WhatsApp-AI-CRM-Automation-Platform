@@ -382,9 +382,13 @@ document.getElementById("btnAdicionarContato").addEventListener("click", async (
         return;
     }
 
-    contatos.push(resultado.contato);
+    const novoContato = resultado.contato || resultado;
+    if (novoContato && novoContato.id) {
+        contatos.unshift(novoContato);
+    }
     renderizarContatos();
     renderizarCheckboxContatos(pegarMarcados("checkboxContatos"));
+    renderizarCheckboxContatosLista();
     document.getElementById("novoContatoNome").value = "";
     document.getElementById("novoContatoTelefone").value = "";
     mostrarToast(`Contato "${nome}" adicionado ✅`);
