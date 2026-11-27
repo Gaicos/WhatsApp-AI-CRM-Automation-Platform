@@ -511,6 +511,10 @@ document.getElementById("formListaContato").addEventListener("submit", async (e)
 
 // ================= GRID DE AGENDAMENTOS =================
 
+function jaEnviouAgendamentoHoje(id) {
+    return envios[id] === new Date().toDateString() || envios[id] === hojeISO();
+}
+
 function renderizarAgendamentos() {
     const grade = document.getElementById("gradeAgendamentos");
     grade.innerHTML = "";
@@ -520,10 +524,8 @@ function renderizarAgendamentos() {
         return;
     }
 
-    const hoje = new Date().toDateString();
-
     agendamentos.forEach((agendamento) => {
-        const jaEnviouHoje = envios[agendamento.id] === hoje;
+        const jaEnviouHoje = jaEnviouAgendamentoHoje(agendamento.id);
         const badge = !agendamento.ativo
             ? '<span class="cartao-badge badge-inativo">inativo</span>'
             : (jaEnviouHoje
@@ -532,6 +534,10 @@ function renderizarAgendamentos() {
 
         const qtdContatos = (agendamento.contatos || []).length;
         const qtdListas = (agendamento.listas || []).length;
+        const totalMidias = (agendamento.midias || []).length;
+        const resumoMidia = agendamento.midiasAleatorias && totalMidias > 0
+            ? `🎲 ${Math.min(Number(agendamento.qtdMidiasEnvio) || 3, totalMidias)}/${totalMidias}`
+            : `📎 ${totalMidias}`;
 
         const card = document.createElement("div");
         card.className = "cartao-agendamento" + (agendamento.ativo ? "" : " inativo");
@@ -540,7 +546,7 @@ function renderizarAgendamentos() {
             <div><span class="cartao-horario">${agendamento.horario}</span> ${badge}</div>
             <p class="cartao-texto">${agendamento.texto}</p>
             <div class="cartao-rodape">
-                <span>📎 ${agendamento.midias.length}</span>
+                <span>${resumoMidia}</span>
                 <span>🔁 ${descreverRecorrenciaCliente(agendamento)}</span>
                 <span>👥 ${agendamento.grupos.length}</span>
                 <span>📱 ${qtdContatos}</span>
@@ -577,13 +583,20 @@ function abrirPreview(id) {
     document.getElementById("previewHoraBolha").textContent = agendamento.horario;
     document.getElementById("previewHorarioInfo").textContent = `${agendamento.horario} · ${descreverRecorrenciaCliente(agendamento)}`;
 
-    const hoje = new Date().toDateString();
-    const jaEnviouHoje = envios[agendamento.id] === hoje;
+    const jaEnviouHoje = jaEnviouAgendamentoHoje(agendamento.id);
     document.getElementById("previewBadge").innerHTML = !agendamento.ativo
         ? '<span class="cartao-badge badge-inativo">inativo</span>'
         : (jaEnviouHoje
             ? '<span class="cartao-badge badge-enviado">✅ enviado hoje</span>'
             : '<span class="cartao-badge badge-pendente">⏳ pendente</span>');
+
+    const totalMidias = (agendamento.midias || []).length;
+    const qtdSort = Math.min(Number(agendamento.qtdMidiasEnvio) || 3, totalMidias || 3);
+    document.getElementById("previewMidiasInfo").textContent = totalMidias === 0
+        ? "Nenhuma"
+        : (agendamento.midiasAleatorias
+            ? `🎲 ${qtdSort} aleatória(s) por envio (de ${totalMidias} cadastradas, sem repetir)`
+            : `${totalMidias} arquivo(s) (envia todas)`);
 
     const nomesGrupos = agendamento.grupos.length
         ? agendamento.grupos.map(gid => grupos.find(g => g.id === gid)?.nome || "(removido)").join(", ")
@@ -683,6 +696,8 @@ function editarAgendamento(id) {
     document.getElementById("campoTexto").value = agendamento.texto;
     document.getElementById("campoAtivo").checked = agendamento.ativo;
     preencherRecorrencia(agendamento);
+    document.getElementById("campoMidiasAleatorias").checked = !!agendamento.midiasAleatorias;
+    document.getElementById("campoQtdMidiasEnvio").value = agendamento.qtdMidiasEnvio || 3;
     atualizarContadorCaracteres();
     midiasFormularioAtual = [...agendamento.midias];
     renderizarListaMidias();
@@ -705,6 +720,8 @@ function duplicarAgendamento(id) {
     document.getElementById("campoTexto").value = agendamento.texto;
     document.getElementById("campoAtivo").checked = agendamento.ativo;
     preencherRecorrencia(agendamento);
+    document.getElementById("campoMidiasAleatorias").checked = !!agendamento.midiasAleatorias;
+    document.getElementById("campoQtdMidiasEnvio").value = agendamento.qtdMidiasEnvio || 3;
     atualizarContadorCaracteres();
     midiasFormularioAtual = [...agendamento.midias];
     renderizarListaMidias();
@@ -737,6 +754,10 @@ function limparFormulario() {
     formAgendamento.reset();
     preencherRecorrencia(null);
     document.getElementById("agendamentoId").value = "";
+    document.getElementById("campoMidiasAleatorias").checked = false;
+    document.getElementById("campoQtdMidiasEnvio").value = 3;
+    const statusUpload = document.getElementById("statusUploadMidias");
+    if (statusUpload) statusUpload.textContent = "";
     atualizarContadorCaracteres();
     midiasFormularioAtual = [];
     renderizarListaMidias();
@@ -818,31 +839,102 @@ document.getElementById("campoTexto").addEventListener("input", atualizarContado
 
 // ================= UPLOAD, REORDENAÇÃO E ROTAÇÃO DE MÍDIA =================
 
-document.getElementById("campoArquivos").addEventListener("change", async (e) => {
-    for (const arquivo of e.target.files) {
-        const formData = new FormData();
-        formData.append("arquivo", arquivo);
+function atualizarControlesMidiasAleatorias() {
+    const total = midiasFormularioAtual.length;
+    const contador = document.getElementById("contadorMidiasForm");
+    if (contador) contador.textContent = `${total} arquivo(s)`;
 
-        try {
-            const resposta = await fetch("/api/upload", { method: "POST", body: formData });
-            if (!resposta.ok) {
-                mostrarToast(`Falha ao enviar "${arquivo.name}"`, "erro");
-                continue;
-            }
-            const resultado = await resposta.json();
-            const tipo = arquivo.type.startsWith("video") ? "video" : "imagem";
-            midiasFormularioAtual.push({ tipo, caminho: resultado.caminho });
-        } catch (err) {
-            mostrarToast(`Erro ao enviar "${arquivo.name}": ${err.message}`, "erro");
+    const btnLimpar = document.getElementById("btnLimparMidias");
+    if (btnLimpar) btnLimpar.classList.toggle("oculto", total < 2);
+
+    const chk = document.getElementById("campoMidiasAleatorias");
+    const bloco = document.getElementById("blocoQtdMidiasAleatorias");
+    const dica = document.getElementById("dicaMidiasAleatorias");
+    const inpQtd = document.getElementById("campoQtdMidiasEnvio");
+
+    if (!chk || !bloco) return;
+    bloco.classList.toggle("oculto", !chk.checked);
+
+    if (chk.checked && dica && inpQtd) {
+        const qtd = Math.max(1, Math.min(50, Number(inpQtd.value) || 3));
+        if (total === 0) {
+            dica.textContent = "Adicione suas imagens abaixo (ex: 20 fotos) para o bot sortear automaticamente.";
+        } else if (qtd >= total) {
+            dica.textContent = `Como há ${total} mídia(s) cadastrada(s) e você pediu ${qtd}, todas serão enviadas (em ordem aleatória).`;
+        } else {
+            const ciclos = Math.ceil(total / qtd);
+            dica.textContent = `De ${total} cadastradas, o bot sorteará ${qtd} diferentes por envio (~${ciclos} envios sem repetir!).`;
         }
     }
+}
+
+document.getElementById("campoMidiasAleatorias")?.addEventListener("change", atualizarControlesMidiasAleatorias);
+document.getElementById("campoQtdMidiasEnvio")?.addEventListener("input", atualizarControlesMidiasAleatorias);
+document.getElementById("btnLimparMidias")?.addEventListener("click", () => {
+    if (!confirm(`Remover todas as ${midiasFormularioAtual.length} mídias deste agendamento?`)) return;
+    midiasFormularioAtual = [];
     renderizarListaMidias();
-    e.target.value = "";
+});
+
+document.getElementById("campoArquivos").addEventListener("change", async (e) => {
+    const arquivos = Array.from(e.target.files || []);
+    if (arquivos.length === 0) return;
+
+    const statusEl = document.getElementById("statusUploadMidias");
+    const btnSalvar = formAgendamento.querySelector('button[type="submit"]');
+    if (btnSalvar) btnSalvar.disabled = true;
+
+    let enviados = 0;
+    let falhas = 0;
+    const LOTE = 3;
+
+    try {
+        for (let i = 0; i < arquivos.length; i += LOTE) {
+            const lote = arquivos.slice(i, i + LOTE);
+            if (statusEl) {
+                statusEl.textContent = `⏳ Enviando ${Math.min(i + lote.length, arquivos.length)} de ${arquivos.length} arquivo(s) para a nuvem...`;
+            }
+
+            await Promise.all(lote.map(async (arquivo) => {
+                const formData = new FormData();
+                formData.append("arquivo", arquivo);
+                try {
+                    const resposta = await fetch("/api/upload", { method: "POST", body: formData });
+                    if (!resposta.ok) {
+                        falhas++;
+                        return;
+                    }
+                    const resultado = await resposta.json();
+                    const tipo = arquivo.type.startsWith("video") ? "video" : "imagem";
+                    midiasFormularioAtual.push({
+                        tipo,
+                        caminho: resultado.caminho,
+                        urlPublica: resultado.urlPublica || undefined
+                    });
+                    enviados++;
+                } catch {
+                    falhas++;
+                }
+            }));
+            renderizarListaMidias();
+        }
+
+        if (statusEl) {
+            statusEl.textContent = falhas > 0
+                ? `⚠️ ${enviados} enviada(s), ${falhas} falha(s).`
+                : `✅ ${enviados} mídia(s) carregada(s)!`;
+        }
+        if (falhas > 0) mostrarToast(`${falhas} arquivo(s) falharam ao enviar`, "erro");
+    } finally {
+        if (btnSalvar) btnSalvar.disabled = false;
+        e.target.value = "";
+    }
 });
 
 function renderizarListaMidias() {
     const ul = document.getElementById("listaMidias");
     ul.innerHTML = "";
+    atualizarControlesMidiasAleatorias();
     midiasFormularioAtual.forEach((midia, index) => {
         const url = caminhoParaUrl(midia.caminho);
         const li = document.createElement("li");
@@ -925,11 +1017,16 @@ formAgendamento.addEventListener("submit", async (e) => {
         if (!confirm("⚠️ Nenhum grupo, contato ou lista foi marcado — esse agendamento NÃO vai enviar pra ninguém. Salvar mesmo assim?")) return;
     }
 
+    const midiasAleatorias = document.getElementById("campoMidiasAleatorias")?.checked || false;
+    const qtdMidiasEnvio = Math.max(1, Math.min(50, Number(document.getElementById("campoQtdMidiasEnvio")?.value) || 3));
+
     const dados = {
         id: idExistente || ("agenda-" + Date.now()),
         horario: document.getElementById("campoHorario").value,
         texto: document.getElementById("campoTexto").value,
         midias: midiasFormularioAtual,
+        midiasAleatorias,
+        qtdMidiasEnvio,
         ativo: document.getElementById("campoAtivo").checked,
         grupos: gruposMarcados,
         contatos: contatosMarcados,

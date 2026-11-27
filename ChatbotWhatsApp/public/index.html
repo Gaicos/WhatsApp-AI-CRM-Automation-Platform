@@ -472,6 +472,7 @@
 
                 <div class="info-preview">
                     <p><strong>Horário:</strong> <span id="previewHorarioInfo"></span> <span id="previewBadge"></span></p>
+                    <p><strong>Mídias:</strong> <span id="previewMidiasInfo"></span></p>
                     <p><strong>Grupos:</strong> <span id="previewGrupos"></span></p>
                     <p><strong>Contatos:</strong> <span id="previewContatos"></span></p>
                     <p><strong>Listas:</strong> <span id="previewListas"></span></p>
@@ -513,9 +514,26 @@
                 </details>
 
                 <details class="accordion" open>
-                    <summary>📎 Mídias</summary>
+                    <summary>📎 Mídias <span id="contadorMidiasForm" class="contador-texto">0 arquivo(s)</span></summary>
                     <div class="conteudo-accordion">
-                        <input type="file" id="campoArquivos" multiple accept="image/*,video/*">
+                        <div style="background:#f8fafc; border:1px solid var(--borda); border-radius:8px; padding:10px; margin-bottom:10px;">
+                            <label class="check-ativo" style="margin:0; font-weight:600;">
+                                <input type="checkbox" id="campoMidiasAleatorias"> 🎲 Sortear mídias aleatórias a cada envio (sem repetir até passar por todas)
+                            </label>
+                            <div id="blocoQtdMidiasAleatorias" class="oculto" style="margin-top:8px;">
+                                <div class="linha-acoes" style="margin:0;">
+                                    <label class="rotulo" for="campoQtdMidiasEnvio" style="margin:0;">Quantas mídias enviar por vez:</label>
+                                    <input type="number" id="campoQtdMidiasEnvio" min="1" max="50" value="3" style="width:90px; margin:0;">
+                                </div>
+                                <p id="dicaMidiasAleatorias" class="texto-ajuda" style="margin:6px 0 0 0;"></p>
+                            </div>
+                        </div>
+
+                        <div class="linha-acoes" style="margin:0; align-items:center;">
+                            <input type="file" id="campoArquivos" multiple accept="image/*,video/*" style="flex:1; margin:0;">
+                            <button type="button" id="btnLimparMidias" class="botao-perigo oculto">🗑️ Remover todas</button>
+                        </div>
+                        <p id="statusUploadMidias" class="texto-ajuda" style="margin:6px 0;"></p>
                         <ul id="listaMidias"></ul>
                     </div>
                 </details>

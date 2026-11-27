@@ -34,6 +34,7 @@ import {
   listarDadosAprendizado, ensinarRespostaAoBot, removerExemploAprendizado, limparInteracoesRecentes
 } from "./services/triagemService.js";
 import { resolverDestinos } from "./services/destinosService.js";
+import { selecionarMidiasParaEnvio } from "./services/midiaSelecaoService.js";
 import {
   lerConfigSupabase,
   salvarConfigSupabase,
@@ -137,6 +138,14 @@ app.get("/api/listas-contatos", exigirLogin, (_req, res) => res.json(lerListasCo
 app.post("/api/listas-contatos", exigirLogin, (req, res) => { salvarListasContatos(req.body); res.json({ ok: true }); });
 app.get("/api/agendamentos", exigirLogin, (_req, res) => res.json(lerAgendamentos()));
 app.post("/api/agendamentos", exigirLogin, (req, res) => { salvarAgendamentos(req.body); res.json({ ok: true }); });
+function montarMensagemAgendamento(agendamento) {
+  const midiasSelecionadas = selecionarMidiasParaEnvio(agendamento);
+  return {
+    texto: agendamento.texto || "",
+    midias: midiasSelecionadas
+  };
+}
+
 app.post("/api/testar/:id", exigirLogin, async (req, res) => {
   const agendamento = lerAgendamentos().find(item => item.id === req.params.id);
   if (!agendamento) return res.status(404).json({ erro: "Agendamento nao encontrado." });
@@ -147,17 +156,19 @@ app.post("/api/testar/:id", exigirLogin, async (req, res) => {
   }
 
   try {
-    const resultadoEnvio = await enviarMensagemGrupos(destinos, {
-      texto: agendamento.texto || "",
-      midias: agendamento.midias || []
-    }, {
+    const mensagem = montarMensagemAgendamento(agendamento);
+    const resultadoEnvio = await enviarMensagemGrupos(destinos, mensagem, {
       horario: agendamento.horario,
       origem: "teste manual"
     });
     if (resultadoEnvio?.enviados === 0) {
       return res.status(400).json({ erro: "Nenhuma mensagem foi enviada. Verifique se o WhatsApp esta conectado." });
     }
-    res.json({ ok: true, mensagem: `Teste concluido: ${resultadoEnvio.enviados} enviado(s), ${resultadoEnvio.falhas} falha(s).` });
+    const totalMidias = (agendamento.midias || []).length;
+    const detalheSorteio = agendamento.midiasAleatorias && totalMidias > 0
+      ? ` (${mensagem.midias.length}/${totalMidias} mídias sorteadas)`
+      : "";
+    res.json({ ok: true, mensagem: `Teste concluido: ${resultadoEnvio.enviados} enviado(s), ${resultadoEnvio.falhas} falha(s).${detalheSorteio}` });
   } catch (err) {
     res.status(500).json({ erro: err.message || "Falha ao enviar o agendamento." });
   }
@@ -348,7 +359,7 @@ try {
 }
 iniciarScheduler((agendamento) => enviarMensagemGrupos(
   resolverDestinos(agendamento),
-  { texto: agendamento.texto || "", midias: agendamento.midias || [] },
+  montarMensagemAgendamento(agendamento),
   { horario: agendamento.horario, origem: "agendado" }
 ));
 
@@ -379,9 +390,10 @@ iniciarMonitoramentoComandosSupabase(async (acao, payload) => {
     if (!agendamento) throw new Error("Agendamento não encontrado.");
     const destinos = resolverDestinos(agendamento);
     if (destinos.length === 0) throw new Error("Este agendamento não possui destinos ativos.");
+    const mensagem = montarMensagemAgendamento(agendamento);
     const resultadoEnvio = await enviarMensagemGrupos(
       destinos,
-      { texto: agendamento.texto || "", midias: agendamento.midias || [] },
+      mensagem,
       { horario: agendamento.horario, origem: "teste manual (nuvem)" }
     );
     return { ok: true, mensagem: `Teste concluído: ${resultadoEnvio.enviados} enviado(s), ${resultadoEnvio.falhas} falha(s).` };
