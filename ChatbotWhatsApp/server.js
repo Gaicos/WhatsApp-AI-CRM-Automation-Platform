@@ -435,16 +435,16 @@ app.get("/api/historico", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res
 app.get("/api/config", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(lerConfig()));
 app.post("/api/config", exigirLogin, exigirAssinaturaAtiva, (req, res) => { salvarConfig({ ...lerConfig(), ...req.body }); res.json({ ok: true }); });
 
-// ----------------- TRIAGEM E IA DO SITE -----------------
-app.get("/api/triagem", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(lerTriagem()));
-app.post("/api/triagem", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
+// ----------------- TRIAGEM E IA DO SITE (APENAS SUPER ADMIN) -----------------
+app.get("/api/triagem", exigirLogin, exigirSuperAdmin, (_req, res) => res.json(lerTriagem()));
+app.post("/api/triagem", exigirLogin, exigirSuperAdmin, (req, res) => {
   const resultado = validarTriagem(req.body);
   if (!resultado.ok) return res.status(400).json(resultado);
   const checkPlano = validarTriagemNoPlano(req.body, req.tenant);
   if (!checkPlano.ok) return res.status(403).json(checkPlano);
   try { res.json({ ok: true, dados: salvarTriagem(req.body) }); } catch (err) { res.status(400).json({ ok: false, erro: err.message }); }
 });
-app.post("/api/triagem/sincronizar-site", exigirLogin, exigirAssinaturaAtiva, async (req, res) => {
+app.post("/api/triagem/sincronizar-site", exigirLogin, exigirSuperAdmin, async (req, res) => {
   try {
     const resultado = await sincronizarSiteNaTriagem(req.body?.urlSite);
     res.json(resultado);
@@ -452,7 +452,7 @@ app.post("/api/triagem/sincronizar-site", exigirLogin, exigirAssinaturaAtiva, as
     res.status(400).json({ ok: false, erro: err.message || "Não foi possível ler o site." });
   }
 });
-app.post("/api/triagem/simular", exigirLogin, exigirAssinaturaAtiva, async (req, res) => {
+app.post("/api/triagem/simular", exigirLogin, exigirSuperAdmin, async (req, res) => {
   try {
     const checkPlano = validarTriagemNoPlano({ ia: req.body?.ia }, req.tenant);
     if (!checkPlano.ok) return res.status(403).json(checkPlano);
@@ -462,24 +462,24 @@ app.post("/api/triagem/simular", exigirLogin, exigirAssinaturaAtiva, async (req,
     res.status(400).json({ ok: false, erro: err.message || "Falha ao simular resposta." });
   }
 });
-app.get("/api/triagem/pausas", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(listarPausasHumano()));
-app.post("/api/triagem/pausas/reativar", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
+app.get("/api/triagem/pausas", exigirLogin, exigirSuperAdmin, (_req, res) => res.json(listarPausasHumano()));
+app.post("/api/triagem/pausas/reativar", exigirLogin, exigirSuperAdmin, (req, res) => {
   reativarAtendimentoBot(req.body?.jid);
   res.json({ ok: true, pausas: listarPausasHumano() });
 });
 
-app.get("/api/triagem/aprendizado", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(listarDadosAprendizado()));
-app.post("/api/triagem/aprendizado", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
+app.get("/api/triagem/aprendizado", exigirLogin, exigirSuperAdmin, (_req, res) => res.json(listarDadosAprendizado()));
+app.post("/api/triagem/aprendizado", exigirLogin, exigirSuperAdmin, (req, res) => {
   try {
     res.json(ensinarRespostaAoBot(req.body));
   } catch (err) {
     res.status(400).json({ ok: false, erro: err.message });
   }
 });
-app.delete("/api/triagem/aprendizado/:id", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
+app.delete("/api/triagem/aprendizado/:id", exigirLogin, exigirSuperAdmin, (req, res) => {
   res.json(removerExemploAprendizado(req.params.id));
 });
-app.post("/api/triagem/aprendizado/limpar-interacoes", exigirLogin, exigirAssinaturaAtiva, (_req, res) => {
+app.post("/api/triagem/aprendizado/limpar-interacoes", exigirLogin, exigirSuperAdmin, (_req, res) => {
   res.json(limparInteracoesRecentes());
 });
 
@@ -503,7 +503,7 @@ app.get("/api/bot/status", exigirLogin, async (req, res) => {
   const supabaseStatus = isSuper ? await verificarConexaoSupabase() : { configurado: true, conectado: true };
   res.json({
     conexaoWhatsapp: statusConexao(req.tenant.id),
-    processo: statusProcesso(),
+    processo: isSuper ? statusProcesso() : null,
     qr: getQrAtual(req.tenant.id),
     supabase: supabaseStatus
   });
@@ -617,13 +617,13 @@ app.post(["/api/webhook/site", "/api/webhook/site/:tenantId"], async (req, res) 
   });
 });
 
-// ----------------- CONFIGURAÇÃO WEBHOOKS NO PAINEL ADMIN DO TENANT -----------------
-app.get("/api/webhooks/config", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
+// ----------------- CONFIGURAÇÃO WEBHOOKS NO PAINEL (APENAS SUPER ADMIN) -----------------
+app.get("/api/webhooks/config", exigirLogin, exigirSuperAdmin, (req, res) => {
   const cfg = lerConfigWebhook();
   const limites = obterLimitesPlano(req.tenant);
   res.json({ ...cfg, permitidoNoPlano: !!limites.permiteWebhook });
 });
-app.post("/api/webhooks/config", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
+app.post("/api/webhooks/config", exigirLogin, exigirSuperAdmin, (req, res) => {
   if (!obterLimitesPlano(req.tenant).permiteWebhook) {
     return res.status(403).json({ ok: false, erro: "Webhooks são exclusivos do Plano Pro." });
   }
@@ -633,18 +633,18 @@ app.post("/api/webhooks/config", exigirLogin, exigirAssinaturaAtiva, (req, res) 
     res.status(400).json({ ok: false, erro: err.message });
   }
 });
-app.post("/api/webhooks/regenerar-segredo", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
+app.post("/api/webhooks/regenerar-segredo", exigirLogin, exigirSuperAdmin, (req, res) => {
   if (!obterLimitesPlano(req.tenant).permiteWebhook) {
     return res.status(403).json({ ok: false, erro: "Webhooks são exclusivos do Plano Pro." });
   }
   res.json({ ok: true, config: regenerarSegredoWebhook() });
 });
-app.get("/api/webhooks/eventos", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(lerEventosWebhook()));
-app.post("/api/webhooks/eventos/limpar", exigirLogin, exigirAssinaturaAtiva, (_req, res) => {
+app.get("/api/webhooks/eventos", exigirLogin, exigirSuperAdmin, (_req, res) => res.json(lerEventosWebhook()));
+app.post("/api/webhooks/eventos/limpar", exigirLogin, exigirSuperAdmin, (_req, res) => {
   limparEventosWebhook();
   res.json({ ok: true });
 });
-app.post("/api/webhooks/testar", exigirLogin, exigirAssinaturaAtiva, async (req, res) => {
+app.post("/api/webhooks/testar", exigirLogin, exigirSuperAdmin, async (req, res) => {
   if (!obterLimitesPlano(req.tenant).permiteWebhook) {
     return res.status(403).json({ ok: false, erro: "Webhooks são exclusivos do Plano Pro." });
   }

@@ -585,4 +585,4 @@ $("triagemInicial").addEventListener("change", evento => {
   fluxoTriagem.nodeInicial = evento.target.value || null;
 });
 
-carregarTriagem();
+window.carregarTriagem = carregarTriagem;

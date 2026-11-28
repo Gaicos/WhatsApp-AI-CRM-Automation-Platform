@@ -33,15 +33,23 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 Agendamentos
             </button>
-            <button type="button" class="aba-botao" data-aba="triagem">
+            <button type="button" class="aba-botao" data-aba="historico">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Histórico de envios
+            </button>
+            <button type="button" class="aba-botao" data-aba="configuracoes">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Configurações
+            </button>
+            <button type="button" id="btnAbaTriagem" class="aba-botao oculto" data-aba="triagem">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 0-4 4v1a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3v3a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3a3 3 0 0 0 3-3v-2a3 3 0 0 0-3-3V6a4 4 0 0 0-4-4z"/><path d="M9 11h.01"/><path d="M15 11h.01"/></svg>
                 Triagem & IA do Site
             </button>
-            <button type="button" class="aba-botao" data-aba="webhooks">
+            <button type="button" id="btnAbaWebhooks" class="aba-botao oculto" data-aba="webhooks">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                 Integração Site
             </button>
-            <button type="button" class="aba-botao" data-aba="status">
+            <button type="button" id="btnAbaStatus" class="aba-botao oculto" data-aba="status">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 Status do sistema
             </button>
@@ -437,6 +445,55 @@
             </div>
         </section>
 
+        <section id="abaHistorico" class="aba oculto">
+            <div class="cabecalho-secao">
+                <h2>Histórico de envios</h2>
+                <button type="button" id="btnAtualizarHistorico" class="botao-secundario">Atualizar histórico</button>
+            </div>
+            <div class="tabela-wrapper">
+                <table class="tabela-historico">
+                    <thead>
+                        <tr><th>Quando</th><th>Horário agend.</th><th>Destino</th><th>Origem</th><th>Status</th><th>Detalhe</th></tr>
+                    </thead>
+                    <tbody id="corpoHistorico"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="abaConfiguracoes" class="aba oculto">
+            <div class="cartao-status">
+                <div class="cartao-status-linha">
+                    <div>
+                        <h3 style="margin-bottom:6px;">Conexão do seu WhatsApp</h3>
+                        <strong>Status atual:</strong>
+                        <span id="statusConexaoConfig" class="codigo-id-mono">verificando...</span>
+                    </div>
+                    <div class="botoes-controle">
+                        <button type="button" id="btnTrocarWhatsappConfig" class="botao-secundario">Trocar WhatsApp / QR Code</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cartao-status">
+                <h3>Controle remoto via WhatsApp</h3>
+                <p class="texto-ajuda">Envie comandos no grupo configurado: <code>!status</code>, <code>!historico</code>, <code>!agendamentos</code>, <code>!ajuda</code></p>
+                <div class="linha-acoes">
+                    <button type="button" id="btnCarregarGruposControle" class="botao-secundario">Carregar grupos</button>
+                    <select id="selectGrupoControle" style="flex:1; min-width:200px; margin:0;"><option>Clique em "Carregar grupos"</option></select>
+                    <button type="button" id="btnSalvarGrupoControle" class="botao-primario">Salvar</button>
+                </div>
+                <p id="grupoControleAtual" class="meta-suave"></p>
+            </div>
+
+            <div class="cartao-status">
+                <h3>Plano & Mensalidade</h3>
+                <div id="resumoPlanoConfig" class="texto-ajuda">Carregando informações da conta...</div>
+                <p class="meta-suave" style="margin-top:12px; margin-bottom:0;">
+                    Em breve você poderá gerenciar e pagar sua mensalidade diretamente por aqui.
+                </p>
+            </div>
+        </section>
+
         <section id="abaStatus" class="aba oculto">
             <div class="cartao-status">
                 <div class="cartao-status-linha">
@@ -484,29 +541,6 @@
                     <button type="button" id="btnSalvarSupabase" class="botao-primario">Salvar & Conectar Supabase</button>
                     <button type="button" id="btnSincronizarSupabaseAgora" class="botao-secundario">Sincronizar Dados Agora</button>
                 </div>
-            </div>
-
-            <div class="cartao-status">
-                <h3>Controle remoto via WhatsApp</h3>
-                <p class="texto-ajuda">Envie comandos no grupo configurado: <code>!status</code>, <code>!historico</code>, <code>!agendamentos</code>, <code>!restart</code>, <code>!ajuda</code></p>
-                <div class="linha-acoes">
-                    <button type="button" id="btnCarregarGruposControle" class="botao-secundario">Carregar grupos</button>
-                    <select id="selectGrupoControle" style="flex:1; min-width:200px; margin:0;"><option>Clique em "Carregar grupos"</option></select>
-                    <button type="button" id="btnSalvarGrupoControle" class="botao-primario">Salvar</button>
-                </div>
-                <p id="grupoControleAtual" class="meta-suave"></p>
-            </div>
-
-            <div class="cabecalho-secao">
-                <h2>Histórico de envios</h2>
-            </div>
-            <div class="tabela-wrapper">
-                <table class="tabela-historico">
-                    <thead>
-                        <tr><th>Quando</th><th>Horário agend.</th><th>Destino</th><th>Origem</th><th>Status</th><th>Detalhe</th></tr>
-                    </thead>
-                    <tbody id="corpoHistorico"></tbody>
-                </table>
             </div>
         </section>
 
@@ -703,7 +737,7 @@
             <ul class="texto-ajuda" style="padding-left:18px; line-height:1.6;">
                 <li>1 agendamento automático</li>
                 <li>Até 2 grupos ou 3 contatos · 1 mídia por envio</li>
-                <li>Triagem inteligente local no seu WhatsApp</li>
+                <li>Histórico de envios e controle remoto via WhatsApp</li>
             </ul>
             <button type="button" id="btnConfirmarAvisoDemo" class="botao-primario largura-total">Entendi, usar conta DEMO</button>
         </div>

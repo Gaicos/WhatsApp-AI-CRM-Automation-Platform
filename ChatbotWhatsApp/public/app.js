@@ -57,15 +57,32 @@ async function carregarTudo() {
 
 document.querySelectorAll(".aba-botao").forEach(botao => {
     botao.addEventListener("click", () => {
+        const aba = botao.dataset.aba;
+        if (!aba) return;
+
         document.querySelectorAll(".aba-botao").forEach(b => b.classList.remove("ativa"));
         botao.classList.add("ativa");
 
-        const aba = botao.dataset.aba;
-        document.getElementById("abaAgendamentos").classList.toggle("oculto", aba !== "agendamentos");
-        document.getElementById("abaTriagem").classList.toggle("oculto", aba !== "triagem");
+        document.getElementById("abaAgendamentos")?.classList.toggle("oculto", aba !== "agendamentos");
+        document.getElementById("abaHistorico")?.classList.toggle("oculto", aba !== "historico");
+        document.getElementById("abaConfiguracoes")?.classList.toggle("oculto", aba !== "configuracoes");
+        document.getElementById("abaTriagem")?.classList.toggle("oculto", aba !== "triagem");
         document.getElementById("abaWebhooks")?.classList.toggle("oculto", aba !== "webhooks");
-        document.getElementById("abaStatus").classList.toggle("oculto", aba !== "status");
+        document.getElementById("abaStatus")?.classList.toggle("oculto", aba !== "status");
         document.getElementById("abaAdmin")?.classList.toggle("oculto", aba !== "admin");
+
+        if (aba === "historico") {
+            carregarHistorico();
+        }
+
+        if (aba === "configuracoes") {
+            carregarGrupoControleAtual();
+            atualizarResumoConfiguracoes();
+        }
+
+        if (aba === "triagem") {
+            window.carregarTriagem?.();
+        }
 
         if (aba === "webhooks") {
             window.carregarPainelWebhooks?.();
@@ -77,11 +94,9 @@ document.querySelectorAll(".aba-botao").forEach(botao => {
 
         if (aba === "status") {
             atualizarStatus();
-            carregarHistorico();
             if (!intervaloStatus) {
                 intervaloStatus = setInterval(() => {
                     atualizarStatus();
-                    carregarHistorico();
                 }, 5000);
             }
         } else {
@@ -146,6 +161,42 @@ document.getElementById("btnNovoQrPainel").addEventListener("click", () => {
     if (!confirm("Abrir tela de conexão / QR Code?")) return;
     window.location.href = "./conectar.html";
 });
+
+document.getElementById("btnTrocarWhatsappConfig")?.addEventListener("click", () => {
+    if (!confirm("Abrir tela de conexão / QR Code do seu WhatsApp?")) return;
+    window.location.href = "./conectar.html";
+});
+
+document.getElementById("btnAtualizarHistorico")?.addEventListener("click", carregarHistorico);
+
+async function atualizarResumoConfiguracoes() {
+    const sessao = window.SESSAO_ATUAL || {};
+    const tenant = sessao.tenant || {};
+    const acesso = sessao.acesso || {};
+    const ehSuper = tenant.papel === "superadmin";
+
+    const resumoEl = document.getElementById("resumoPlanoConfig");
+    if (resumoEl) {
+        const planoNome = ehSuper
+            ? "Administrador (Ilimitado)"
+            : (tenant.plano === "pro" ? "Plano Pro" : "Teste Grátis (DEMO - 7 dias)");
+        const validadeTxt = ehSuper
+            ? "Sem vencimento"
+            : (acesso.diasRestantes != null ? `${acesso.diasRestantes} dia(s) restante(s)` : "Ativo");
+        const codigoTxt = tenant.codigoUnico ? ` · Código: <code>${tenant.codigoUnico}</code>` : "";
+        resumoEl.innerHTML = `<strong>Plano atual:</strong> ${planoNome}${codigoTxt}<br><strong>Situação:</strong> ${validadeTxt}`;
+    }
+
+    const stEl = document.getElementById("statusConexaoConfig");
+    if (stEl) {
+        try {
+            const dados = await fetch("/api/bot/status").then(r => r.json());
+            stEl.textContent = dados?.conexaoWhatsapp?.conectado ? "✅ conectado" : "🔌 desconectado";
+        } catch {
+            stEl.textContent = "indisponível";
+        }
+    }
+}
 
 async function carregarHistorico() {
     const historico = await fetch("/api/historico").then(r => r.json());
@@ -1293,6 +1344,9 @@ async function iniciarPagina() {
         badge.textContent = `${tenant.nome || tenant.usuario || ""} · ${planoTxt}${codTxt}`;
     }
 
+    document.getElementById("btnAbaTriagem")?.classList.toggle("oculto", !ehSuper);
+    document.getElementById("btnAbaWebhooks")?.classList.toggle("oculto", !ehSuper);
+    document.getElementById("btnAbaStatus")?.classList.toggle("oculto", !ehSuper);
     document.getElementById("btnAbaAdmin")?.classList.toggle("oculto", !ehSuper);
     document.getElementById("cartaoSupabaseAdmin")?.classList.toggle("oculto", !ehSuper);
     document.getElementById("btnReiniciarBot")?.classList.toggle("oculto", !ehSuper);
@@ -1324,7 +1378,11 @@ async function iniciarPagina() {
     const status = await fetch("/api/bot/status").then(r => r.json()).catch(() => null);
     if (!status || !status.conexaoWhatsapp.conectado) { window.location.href = "./conectar.html"; return; }
 
+    atualizarResumoConfiguracoes();
     carregarTudo();
+    if (ehSuper) {
+        window.carregarTriagem?.();
+    }
 }
 
 iniciarPagina();
