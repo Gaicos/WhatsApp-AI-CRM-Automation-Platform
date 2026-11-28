@@ -12,6 +12,7 @@ const MAPA_ARQUIVOS_CHAVES = {
   historico: "./data/historico.json",
   config: "./data/config.json",
   contatos: "./data/contatos.json",
+  contatosWhatsapp: "./data/contatosWhatsapp.json",
   listasContatos: "./data/listasContatos.json",
   triagem: "./data/triagem.json",
   aprendizadoBot: "./data/aprendizadoBot.json",

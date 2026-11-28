@@ -14,6 +14,7 @@ let agendamentos = [];
 let envios = {};
 let midiasFormularioAtual = [];
 let gruposWhatsappCache = [];
+let contatosWhatsappCache = [];
 let previewAtualId = null;
 let intervaloStatus = null;
 let gruposControleCache = [];
@@ -400,6 +401,122 @@ function removerContato(index) {
     salvarContatosArray();
     renderizarContatos();
     renderizarCheckboxContatos(pegarMarcados("checkboxContatos"));
+    renderizarCheckboxContatosLista();
+    if (contatosWhatsappCache.length > 0) renderizarContatosNovos();
+}
+
+function apenasDigitosTelefone(valor) {
+    let digits = String(valor || "").replace(/\D/g, "");
+    if (digits.startsWith("0") && (digits.length === 11 || digits.length === 12)) {
+        digits = digits.slice(1);
+    }
+    if (digits.length === 10 || digits.length === 11) {
+        digits = `55${digits}`;
+    }
+    return digits;
+}
+
+async function carregarContatosDoWhatsapp(forcar = false) {
+    const btnBuscar = document.getElementById("btnBuscarContatosWhatsapp");
+    const btnRessinc = document.getElementById("btnRessincronizarContatosWhatsapp");
+    const filtroNovos = document.getElementById("filtroContatosNovos");
+    const listaDiv = document.getElementById("listaContatosWhatsapp");
+
+    if (btnBuscar) btnBuscar.disabled = true;
+    if (btnRessinc) btnRessinc.disabled = true;
+    listaDiv.innerHTML = `<p class="meta-suave">${forcar ? "Atualizando agenda completa do WhatsApp..." : "Buscando contatos salvos no WhatsApp..."}</p>`;
+
+    try {
+        const resp = await fetch(`/api/contatos-whatsapp${forcar ? "?forcar=1" : ""}`);
+        const dados = await resp.json().catch(() => []);
+        if (!resp.ok || !Array.isArray(dados)) {
+            listaDiv.innerHTML = `<p class="texto-erro">${dados?.erro || "Não foi possível carregar os contatos do WhatsApp."}</p>`;
+            mostrarToast(dados?.erro || "Erro ao buscar contatos.", "erro");
+            return;
+        }
+        contatosWhatsappCache = dados;
+        if (filtroNovos) {
+            filtroNovos.style.display = "block";
+            if (!forcar) filtroNovos.value = "";
+        }
+        if (btnRessinc) btnRessinc.classList.remove("oculto");
+        renderizarContatosNovos();
+    } catch {
+        listaDiv.innerHTML = `<p class="texto-erro">Sem conexão ao buscar os contatos. Tente novamente.</p>`;
+        mostrarToast("Erro de conexão ao buscar contatos.", "erro");
+    } finally {
+        if (btnBuscar) btnBuscar.disabled = false;
+        if (btnRessinc) btnRessinc.disabled = false;
+    }
+}
+
+document.getElementById("btnBuscarContatosWhatsapp")?.addEventListener("click", () => carregarContatosDoWhatsapp(false));
+document.getElementById("btnRessincronizarContatosWhatsapp")?.addEventListener("click", () => carregarContatosDoWhatsapp(true));
+document.getElementById("filtroContatosNovos")?.addEventListener("input", renderizarContatosNovos);
+
+function renderizarContatosNovos() {
+    const div = document.getElementById("listaContatosWhatsapp");
+    if (!div) return;
+    const filtro = (document.getElementById("filtroContatosNovos")?.value || "").toLowerCase().trim();
+    const idsJaAdicionados = new Set(contatos.map(c => c.id));
+    const telsJaAdicionados = new Set(contatos.map(c => apenasDigitosTelefone(c.telefone)).filter(Boolean));
+
+    const novos = contatosWhatsappCache.filter(c => {
+        if (idsJaAdicionados.has(c.id)) return false;
+        const dig = apenasDigitosTelefone(c.telefone);
+        if (dig && telsJaAdicionados.has(dig)) return false;
+        if (!filtro) return true;
+        return String(c.nome || "").toLowerCase().includes(filtro) || String(c.telefone || "").includes(filtro);
+    });
+
+    if (novos.length === 0) {
+        div.innerHTML = contatosWhatsappCache.length === 0
+            ? `<p class="meta-suave">Nenhum contato sincronizado ainda. Se acabou de conectar, clique em "Atualizar agenda completa" ou aguarde alguns segundos.</p>`
+            : `<p class="meta-suave">Nenhum contato novo encontrado com esse filtro.</p>`;
+        return;
+    }
+
+    div.innerHTML = "";
+    const limite = 80;
+    const exibidos = novos.slice(0, limite);
+    if (novos.length > limite) {
+        const aviso = document.createElement("p");
+        aviso.className = "meta-suave";
+        aviso.style.margin = "4px 0 8px 0";
+        aviso.textContent = `Exibindo ${limite} de ${novos.length} contatos encontrados — use o filtro acima para buscar por nome ou número.`;
+        div.appendChild(aviso);
+    }
+
+    exibidos.forEach(c => {
+        const span = document.createElement("span");
+        span.className = "tag-grupo";
+        span.textContent = `+ ${c.nome} (${c.telefone})`;
+        span.title = "Clique para adicionar à sua lista de contatos";
+        span.onclick = () => adicionarContatoDoWhatsapp(c);
+        div.appendChild(span);
+    });
+}
+
+async function adicionarContatoDoWhatsapp(contato) {
+    const resposta = await fetch("/api/contatos/adicionar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: contato.nome, telefone: contato.telefone }),
+    });
+    const resultado = await resposta.json().catch(() => ({}));
+    if (!resposta.ok) {
+        mostrarToast(resultado.erro || "Erro ao adicionar contato", "erro");
+        return;
+    }
+    const novoContato = resultado.contato || resultado;
+    if (novoContato && novoContato.id) {
+        contatos.unshift(novoContato);
+    }
+    renderizarContatos();
+    renderizarCheckboxContatos(pegarMarcados("checkboxContatos"));
+    renderizarCheckboxContatosLista();
+    renderizarContatosNovos();
+    mostrarToast(`Contato "${contato.nome}" adicionado`);
 }
 
 document.getElementById("btnAdicionarContato").addEventListener("click", async () => {

@@ -111,6 +111,13 @@
                         <button id="btnAdicionarContato" class="botao-primario">+ Adicionar</button>
                     </div>
 
+                    <div class="linha-acoes" style="margin-top:0;">
+                        <button type="button" id="btnBuscarContatosWhatsapp" class="botao-secundario">Buscar contatos do WhatsApp</button>
+                        <button type="button" id="btnRessincronizarContatosWhatsapp" class="oculto" title="Forçar nova leitura completa da agenda do WhatsApp">Atualizar agenda completa</button>
+                    </div>
+                    <input type="text" id="filtroContatosNovos" placeholder="Filtrar contatos encontrados (nome ou número)..." style="display:none;">
+                    <div id="listaContatosWhatsapp"></div>
+
                     <input type="text" id="filtroContatos" placeholder="Filtrar por nome...">
 
                     <div class="tabela-wrapper">

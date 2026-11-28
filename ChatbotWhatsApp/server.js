@@ -12,7 +12,7 @@ import {
 } from "./services/authService.js";
 import {
   conectarWhatsApp, ligarBot, desligarBot, sairDoWhatsapp, statusConexao, getQrAtual,
-  getGruposRecebidos, buscarGruposWhatsapp, gerarNovoQr, enviarMensagemGrupos, enviarMensagemDireta,
+  getGruposRecebidos, buscarGruposWhatsapp, buscarContatosWhatsapp, gerarNovoQr, enviarMensagemGrupos, enviarMensagemDireta,
   listarStatusSessoesWhatsapp, solicitarCodigoPareamento, getSock
 } from "./whatsapp/whatsappService.js";
 import { enviarEmailVerificacao } from "./services/emailService.js";
@@ -358,6 +358,15 @@ app.get("/api/grupos-whatsapp", exigirLogin, exigirAssinaturaAtiva, async (req, 
 });
 
 app.get("/api/contatos", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(lerContatos()));
+app.get("/api/contatos-whatsapp", exigirLogin, exigirAssinaturaAtiva, async (req, res) => {
+  try {
+    const forcarSnapshot = req.query?.forcar === "1" || req.query?.forcar === "true";
+    const lista = await buscarContatosWhatsapp(req.tenant.id, { forcarSnapshot });
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ erro: err?.message || "Não foi possível carregar os contatos do WhatsApp." });
+  }
+});
 app.post("/api/contatos/adicionar", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
   const contatos = lerContatos();
   const nome = String(req.body?.nome || "").trim();

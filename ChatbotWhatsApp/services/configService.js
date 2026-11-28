@@ -67,6 +67,14 @@ export function salvarContatos(contatos) {
     salvarJsonTenant("contatos.json", "contatos", contatos);
 }
 
+export function lerContatosWhatsapp() {
+    return lerJsonTenant("contatosWhatsapp.json", []);
+}
+
+export function salvarContatosWhatsapp(contatos) {
+    salvarJsonTenant("contatosWhatsapp.json", "contatosWhatsapp", contatos);
+}
+
 export function lerListasContatos() {
     return lerJsonTenant("listasContatos.json", []);
 }

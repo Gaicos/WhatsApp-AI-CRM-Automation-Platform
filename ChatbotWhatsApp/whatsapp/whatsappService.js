@@ -4,7 +4,7 @@ import qrcodeTerminal from "qrcode-terminal";
 import QRCode from "qrcode";
 import fs from "fs";
 import pino from "pino";
-import { registrarHistorico, lerConfig } from "../services/configService.js";
+import { registrarHistorico, lerConfig, lerContatosWhatsapp, salvarContatosWhatsapp } from "../services/configService.js";
 import { statusProcesso, reiniciarProcesso } from "../services/processoService.js";
 import { textoHistorico, textoAgendamentos, textoAjuda } from "../services/comandosService.js";
 import { processarTriagem } from "../services/triagemService.js";
@@ -42,12 +42,167 @@ function obterEstado(tenantId = obterTenantAtual()) {
             geracaoAtual: 0,
             gruposRecebidos: new Map(),
             buscandoGruposPromise: null,
+            contatosRecebidos: new Map(),
+            contatosCarregadosDoDisco: false,
+            lidParaPn: new Map(),
+            authKeysAtual: null,
+            buscandoContatosPromise: null,
+            timerSalvarContatos: null,
             credenciaisAtuais: null,
             erroConexao: null
         };
         sessoesWhatsapp.set(tid, st);
     }
     return st;
+}
+
+function extrairDigitosTelefoneContato(valor) {
+    const bruto = String(valor || "").trim();
+    if (!bruto || /@(g\.us|newsletter|broadcast)$/i.test(bruto) || bruto === "status@broadcast") {
+        return "";
+    }
+    const antesArroba = bruto.includes("@") ? bruto.split("@")[0] : bruto;
+    const semDispositivo = antesArroba.split(":")[0];
+    let digits = semDispositivo.replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("0") && (digits.length === 11 || digits.length === 12)) {
+        digits = digits.slice(1);
+    }
+    if (digits.length === 10 || digits.length === 11) {
+        digits = `55${digits}`;
+    }
+    if (digits.length < 10 || digits.length > 15) return "";
+    return digits;
+}
+
+function baseLid(valor) {
+    const bruto = String(valor || "").trim();
+    if (!/@lid$/i.test(bruto)) return "";
+    return bruto.split("@")[0].split(":")[0];
+}
+
+export function normalizarContatoWhatsapp(raw, { lidParaPn, meuTelefone = "" } = {}) {
+    if (!raw || typeof raw !== "object") return null;
+
+    const idBruto = String(raw.id || "").trim();
+    if (/@(g\.us|newsletter|broadcast)$/i.test(idBruto) || idBruto === "status@broadcast") {
+        return null;
+    }
+
+    const lidChave = baseLid(raw.lid) || baseLid(idBruto);
+    const pnCandidato =
+        raw.phoneNumber ||
+        raw.telefone ||
+        (!/@lid$/i.test(idBruto) ? idBruto : "") ||
+        (lidChave && lidParaPn instanceof Map ? lidParaPn.get(lidChave) : "");
+
+    const telefone = extrairDigitosTelefoneContato(pnCandidato);
+    if (!telefone) return null;
+    if (meuTelefone && telefone === meuTelefone) return null;
+
+    const nomeAgenda = String(raw.name || raw.nome || "").trim();
+    const temNomeSalvo = Boolean(nomeAgenda);
+    const nome = nomeAgenda || String(raw.verifiedName || raw.notify || "").trim() || telefone;
+
+    return {
+        id: `${telefone}@s.whatsapp.net`,
+        nome,
+        telefone,
+        temNomeSalvo
+    };
+}
+
+function obterMeuTelefone(st) {
+    return extrairDigitosTelefoneContato(st?.credenciaisAtuais?.me?.id || "");
+}
+
+function ordenarListaContatosWhatsapp(mapa) {
+    return Array.from(mapa.values())
+        .map(({ id, nome, telefone }) => ({ id, nome, telefone }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+function carregarContatosPersistidos(tid, st) {
+    if (st.contatosCarregadosDoDisco) return;
+    st.contatosCarregadosDoDisco = true;
+    const salvos = executarNoTenant(tid, () => lerContatosWhatsapp());
+    const meuTelefone = obterMeuTelefone(st);
+    for (const item of Array.isArray(salvos) ? salvos : []) {
+        const norm = normalizarContatoWhatsapp(item, { lidParaPn: st.lidParaPn, meuTelefone });
+        if (norm) {
+            st.contatosRecebidos.set(norm.id, {
+                id: norm.id,
+                nome: norm.nome,
+                telefone: norm.telefone,
+                temNomeSalvo: norm.nome !== norm.telefone
+            });
+        }
+    }
+}
+
+function agendarPersistenciaContatos(tid, st) {
+    if (st.timerSalvarContatos) clearTimeout(st.timerSalvarContatos);
+    st.timerSalvarContatos = setTimeout(() => {
+        st.timerSalvarContatos = null;
+        const lista = ordenarListaContatosWhatsapp(st.contatosRecebidos);
+        executarNoTenant(tid, () => salvarContatosWhatsapp(lista));
+    }, 1500);
+}
+
+function registrarParLidPn(st, lidValor, pnValor) {
+    const lKey = baseLid(lidValor);
+    const pnDigits = extrairDigitosTelefoneContato(pnValor);
+    if (lKey && pnDigits && st.lidParaPn instanceof Map) {
+        st.lidParaPn.set(lKey, `${pnDigits}@s.whatsapp.net`);
+    }
+}
+
+function mesclarContatosNoEstado(tid, st, origem) {
+    if (!origem) return false;
+    const itens = Array.isArray(origem) ? origem : Object.values(origem);
+    if (itens.length === 0) return false;
+
+    const meuTelefone = obterMeuTelefone(st);
+    let alterou = false;
+
+    for (const c of itens) {
+        if (!c || typeof c !== "object") continue;
+        if (c.lid && (c.phoneNumber || (c.id && !/@lid$/i.test(c.id)))) {
+            registrarParLidPn(st, c.lid, c.phoneNumber || c.id);
+        } else if (/@lid$/i.test(String(c.id || "")) && c.phoneNumber) {
+            registrarParLidPn(st, c.id, c.phoneNumber);
+        }
+
+        const norm = normalizarContatoWhatsapp(c, { lidParaPn: st.lidParaPn, meuTelefone });
+        if (!norm) continue;
+
+        const atual = st.contatosRecebidos.get(norm.id);
+        if (!atual) {
+            st.contatosRecebidos.set(norm.id, norm);
+            alterou = true;
+            continue;
+        }
+
+        // Preserva nome salvo na agenda sobre fallback de pushName/telefone
+        const deveAtualizarNome =
+            (norm.temNomeSalvo && (!atual.temNomeSalvo || norm.nome !== atual.nome)) ||
+            (!atual.temNomeSalvo && atual.nome === atual.telefone && norm.nome !== norm.telefone);
+
+        if (deveAtualizarNome) {
+            st.contatosRecebidos.set(norm.id, {
+                id: norm.id,
+                nome: norm.nome,
+                telefone: norm.telefone,
+                temNomeSalvo: atual.temNomeSalvo || norm.temNomeSalvo
+            });
+            alterou = true;
+        }
+    }
+
+    if (alterou) {
+        agendarPersistenciaContatos(tid, st);
+    }
+    return alterou;
 }
 
 function mesclarGruposNoEstado(st, origem) {
@@ -152,6 +307,8 @@ export async function conectarWhatsApp(tenantId = obterTenantAtual()) {
         }
 
         st.credenciaisAtuais = state.creds;
+        st.authKeysAtual = state.keys;
+        carregarContatosPersistidos(tid, st);
         const minhaGeracao = ++st.geracaoAtual;
 
         const versao = await obterVersaoWhatsapp();
@@ -185,6 +342,14 @@ export async function conectarWhatsApp(tenantId = obterTenantAtual()) {
         };
         sock.ev.on("groups.upsert", registrarGrupos);
         sock.ev.on("groups.update", registrarGrupos);
+        sock.ev.on("contacts.upsert", (lista) => mesclarContatosNoEstado(tid, st, lista));
+        sock.ev.on("contacts.update", (lista) => mesclarContatosNoEstado(tid, st, lista));
+        sock.ev.on("messaging-history.set", ({ contacts }) => mesclarContatosNoEstado(tid, st, contacts));
+        sock.ev.on("lid-mapping.update", (par) => {
+            if (par?.lid && par?.pn) {
+                registrarParLidPn(st, par.lid, par.pn);
+            }
+        });
 
         sock.ev.on("connection.update", (update) => executarNoTenant(tid, async () => {
             if (minhaGeracao !== st.geracaoAtual) return;
@@ -219,6 +384,11 @@ export async function conectarWhatsApp(tenantId = obterTenantAtual()) {
                         buscarGruposWhatsapp(tid).catch(() => {});
                     }
                 }, 1500);
+                setTimeout(() => {
+                    if (st.whatsappConectado && st.contatosRecebidos.size === 0) {
+                        buscarContatosWhatsapp(tid).catch(() => {});
+                    }
+                }, 3500);
             }
 
             if (connection === "close") {
@@ -440,6 +610,48 @@ export async function buscarGruposWhatsapp(tenantId = obterTenantAtual()) {
     return Object.fromEntries(st.gruposRecebidos);
 }
 
+export async function buscarContatosWhatsapp(tenantId = obterTenantAtual(), { forcarSnapshot = false } = {}) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
+    carregarContatosPersistidos(tid, st);
+
+    const sock = st.sockAtual;
+    if (sock && st.whatsappConectado && typeof sock.resyncAppState === "function") {
+        if (!st.buscandoContatosPromise) {
+            st.buscandoContatosPromise = (async () => {
+                try {
+                    if ((forcarSnapshot || st.contatosRecebidos.size === 0) && typeof st.authKeysAtual?.set === "function") {
+                        await st.authKeysAtual.set({
+                            "app-state-sync-version": { critical_unblock_low: null }
+                        });
+                    }
+                    await Promise.race([
+                        sock.resyncAppState(["critical_unblock_low"], false),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error("Tempo esgotado ao sincronizar contatos.")), 25000)
+                        )
+                    ]);
+                    await new Promise((resolve) => setTimeout(resolve, 400));
+                    if (st.timerSalvarContatos) {
+                        clearTimeout(st.timerSalvarContatos);
+                        st.timerSalvarContatos = null;
+                        executarNoTenant(tid, () =>
+                            salvarContatosWhatsapp(ordenarListaContatosWhatsapp(st.contatosRecebidos))
+                        );
+                    }
+                } catch (err) {
+                    console.log(`⚠️ [${tid}] Erro ao sincronizar contatos da agenda:`, err?.message || err);
+                } finally {
+                    st.buscandoContatosPromise = null;
+                }
+            })();
+        }
+        await st.buscandoContatosPromise;
+    }
+
+    return ordenarListaContatosWhatsapp(st.contatosRecebidos);
+}
+
 export async function gerarNovoQr(tenantId = obterTenantAtual()) {
     const tid = normalizarTenantId(tenantId);
     const st = obterEstado(tid);
@@ -471,6 +683,14 @@ export async function sairDoWhatsapp(tenantId = obterTenantAtual()) {
     st.whatsappConectado = false;
     st.qrAtual = null;
     st.gruposRecebidos.clear();
+    if (st.timerSalvarContatos) {
+        clearTimeout(st.timerSalvarContatos);
+        st.timerSalvarContatos = null;
+    }
+    st.contatosRecebidos.clear();
+    st.lidParaPn.clear();
+    st.contatosCarregadosDoDisco = false;
+    executarNoTenant(tid, () => salvarContatosWhatsapp([]));
     fs.rmSync(pastaAuthLocalTenant(tid), { recursive: true, force: true });
     await limparAuthWhatsappNoSupabase(prefixoAuthWhatsappTenant(tid));
 }
