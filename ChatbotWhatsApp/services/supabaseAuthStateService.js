@@ -57,7 +57,7 @@ export async function useSupabaseAuthState(supabaseOverride = null, prefixo = ""
         cache.set(item.chave, desserializarValor(item.valor));
       }
       for (const k of lote) {
-        if (!encontrados.has(k)) {
+        if (!encontrados.has(k) && !k.includes("app-state-sync-key-")) {
           cache.set(k, null);
         }
       }

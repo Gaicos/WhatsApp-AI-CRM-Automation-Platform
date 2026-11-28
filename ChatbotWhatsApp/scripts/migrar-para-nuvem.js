@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   lerConfigSupabase,
+  obterClienteSupabase,
   enviarMidiaParaSupabaseStorage,
   sincronizarTudoComSupabase,
   salvarChaveNoSupabase
@@ -103,6 +104,28 @@ async function main() {
     } catch {}
   }
 
+  let chavesAppStateEnviadas = 0;
+  const supabase = obterClienteSupabase();
+  if (supabase && fs.existsSync("./auth_info")) {
+    try {
+      const arqs = fs
+        .readdirSync("./auth_info")
+        .filter((f) => f.startsWith("app-state-sync-key-") && f.endsWith(".json"));
+      if (arqs.length > 0) {
+        const agoraIso = new Date().toISOString();
+        const rows = arqs.map((f) => ({
+          chave: f.replace(/\//g, "__").replace(/:/g, "-"),
+          valor: { raw: fs.readFileSync(path.join("./auth_info", f), "utf-8") },
+          atualizado_em: agoraIso
+        }));
+        const { error } = await supabase
+          .from("whatsapp_auth_state")
+          .upsert(rows, { onConflict: "chave" });
+        if (!error) chavesAppStateEnviadas = rows.length;
+      }
+    } catch {}
+  }
+
   console.log(
     JSON.stringify({
       ok: true,
@@ -110,7 +133,8 @@ async function main() {
       midiasEnviadas: arquivosEnviados,
       midiasJaPublicas: midiasReaproveitadas,
       midiasComFalha,
-      agendamentosAtualizados
+      agendamentosAtualizados,
+      chavesAppStateEnviadas
     })
   );
 }
