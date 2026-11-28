@@ -3,16 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Entrar ou Criar Conta Grátis — Painel do Bot</title>
+    <title>Entrar ou Criar Conta Grátis — Gaicos Bot</title>
     <link rel="stylesheet" href="style.css">
+    <script src="matrix-bg.js" defer></script>
 </head>
-<body class="pagina-login">
+<body class="pagina-login" data-matrix-opacity="0.16">
     <div class="caixa-login" style="max-width:440px;">
-        <h2>🤖 WhatsApp Automation</h2>
+        <div class="caixa-login-marca">
+            <span class="logo-bot" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v3"/><circle cx="12" cy="2" r="1"/>
+                    <rect x="4" y="6" width="16" height="13" rx="3"/>
+                    <circle cx="9.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>
+                    <circle cx="14.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>
+                    <path d="M9 16h6"/>
+                </svg>
+            </span>
+            <div>
+                <h2>WhatsApp Automation</h2>
+                <div class="marca-sub" style="justify-content:center;">
+                    <span class="ponto-live"></span> MATRIX CORE // ACESSO
+                </div>
+            </div>
+        </div>
 
-        <div id="abasLoginCadastro" style="display:flex; gap:8px; margin-bottom:16px;">
+        <div id="abasLoginCadastro" class="abas-login">
             <button type="button" id="tabModoLogin" class="botao-primario" style="flex:1;">Entrar</button>
-            <button type="button" id="tabModoCadastro" class="botao-secundario" style="flex:1; opacity:0.75;">✨ Criar conta grátis</button>
+            <button type="button" id="tabModoCadastro" class="botao-secundario" style="flex:1; opacity:0.75;">Criar conta grátis</button>
         </div>
 
         <form id="formLogin">
@@ -22,14 +39,14 @@
             <label class="rotulo" for="campoSenha">Senha</label>
             <input type="password" id="campoSenha" autocomplete="current-password" required>
 
-            <button type="submit" class="botao-primario largura-total">Entrar</button>
+            <button type="submit" class="botao-primario largura-total">Entrar no painel</button>
             <p id="erroLogin" class="erro-login"></p>
         </form>
 
         <form id="formCadastroGratis" class="oculto">
-            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px; font-size:0.86em; color:#166534; margin-bottom:12px;">
-                <strong>🎁 Conta DEMO Gratuita (7 dias):</strong><br>
-                • 1 agendamento • até 2 grupos ou 3 contatos • 1 mídia<br>
+            <div class="caixa-info-demo">
+                <strong>Conta DEMO Gratuita (7 dias):</strong><br>
+                • 1 agendamento automático · até 2 grupos ou 3 contatos · 1 mídia<br>
                 • Enviaremos um código/link para validar seu e-mail no 1º acesso
             </div>
 
@@ -48,26 +65,26 @@
             <label class="rotulo" for="regConfirmarSenha">Confirme a senha</label>
             <input type="password" id="regConfirmarSenha" minlength="8" autocomplete="new-password" required>
 
-            <button type="submit" class="botao-primario largura-total">🚀 Criar Conta DEMO Agora</button>
+            <button type="submit" class="botao-primario largura-total">Criar Conta DEMO Agora</button>
             <p id="erroCadastro" class="erro-login"></p>
         </form>
 
         <div id="blocoVerificarEmail" class="oculto">
-            <div style="background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:12px; font-size:0.9em; color:#92400e; margin-bottom:14px;">
-                <strong>📧 Confirme seu e-mail para fazer o 1º login</strong>
+            <div class="aviso-alerta" style="text-align:left;">
+                <strong>Confirme seu e-mail para fazer o 1º login</strong>
                 <p id="textoInfoVerificacao" style="margin:6px 0 0 0; line-height:1.45;"></p>
-                <p id="textoCodigoUnicoCadastro" style="margin:8px 0 0 0; font-weight:700;"></p>
+                <p id="textoCodigoUnicoCadastro" class="codigo-id-mono" style="margin:8px 0 0 0; font-weight:700;"></p>
             </div>
 
             <form id="formVerificarEmail">
                 <label class="rotulo" for="campoCodigoEmail">Código de 6 dígitos recebido no e-mail</label>
-                <input type="text" id="campoCodigoEmail" maxlength="6" placeholder="Ex: 123456" style="text-align:center; font-size:1.3em; letter-spacing:4px;" required>
+                <input type="text" id="campoCodigoEmail" maxlength="6" placeholder="000000" style="text-align:center; font-size:1.3em; letter-spacing:4px; font-family:var(--mono);" required>
 
-                <button type="submit" class="botao-primario largura-total">✅ Validar e Entrar na Conta DEMO</button>
+                <button type="submit" class="botao-primario largura-total">Validar e Entrar na Conta DEMO</button>
             </form>
 
             <div style="display:flex; gap:8px; margin-top:10px;">
-                <button type="button" id="btnReenviarCodigoEmail" class="botao-secundario" style="flex:1;">🔄 Reenviar código</button>
+                <button type="button" id="btnReenviarCodigoEmail" class="botao-secundario" style="flex:1;">Reenviar código</button>
                 <button type="button" id="btnVoltarLogin" class="botao-secundario" style="flex:1; opacity:0.8;">← Voltar</button>
             </div>
             <p id="msgVerificacaoEmail" class="erro-login"></p>
@@ -120,7 +137,7 @@
             const tokenEmail = params.get("verificar");
             if (tokenEmail) {
                 const erroEl = document.getElementById("erroLogin");
-                erroEl.style.color = "#075E54";
+                erroEl.style.color = "var(--verde-brilho)";
                 erroEl.textContent = "Validando seu e-mail pelo link...";
                 try {
                     const resp = await fetch("/api/verificar-email", {
@@ -255,7 +272,7 @@
 
         document.getElementById("btnReenviarCodigoEmail").addEventListener("click", async () => {
             const msgEl = document.getElementById("msgVerificacaoEmail");
-            msgEl.style.color = "#075E54";
+            msgEl.style.color = "var(--verde-brilho)";
             msgEl.textContent = "Reenviando código...";
             try {
                 const resp = await fetch("/api/reenviar-codigo-email", {
@@ -269,7 +286,7 @@
                     msgEl.textContent = dados.erro || "Não foi possível reenviar.";
                     return;
                 }
-                msgEl.textContent = dados.avisoEmail || "✅ Novo código enviado para o seu e-mail!";
+                msgEl.textContent = dados.avisoEmail || "Novo código enviado para o seu e-mail.";
             } catch {
                 msgEl.style.color = "";
                 msgEl.textContent = "Falha de comunicação ao reenviar.";

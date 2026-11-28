@@ -109,7 +109,7 @@ async function atualizarStatus() {
             <div class="info-pm2-item"><strong>${dados.processo.cpu}%</strong><span>cpu</span></div>
         `;
     } else {
-        div.innerHTML = `<p style="color:#999">Informações do programa indisponíveis.</p>`;
+        div.innerHTML = `<p style="color:var(--texto-suave)">Informações do programa indisponíveis.</p>`;
     }
 }
 
@@ -440,7 +440,7 @@ function renderizarCheckboxContatosLista(idsMarcados = []) {
     div.innerHTML = "";
 
     if (contatos.length === 0) {
-        div.innerHTML = "<p style='color:#999; font-size:0.85em;'>Cadastre contatos primeiro, na seção acima.</p>";
+        div.innerHTML = "<p style='color:var(--texto-suave); font-size:0.85em;'>Cadastre contatos primeiro, na seção acima.</p>";
         return;
     }
 
@@ -448,7 +448,7 @@ function renderizarCheckboxContatosLista(idsMarcados = []) {
         const label = document.createElement("label");
         label.innerHTML = `
             <input type="checkbox" value="${contato.id}" ${idsMarcados.includes(contato.id) ? "checked" : ""}>
-            ${contato.nome} <small style="color:#999;">(${contato.telefone})</small>
+            ${contato.nome} <small style="color:var(--texto-suave);">(${contato.telefone})</small>
         `;
         div.appendChild(label);
     });
@@ -804,13 +804,13 @@ function renderizarCheckboxContatos(idsMarcados = []) {
     div.innerHTML = "";
 
     if (contatos.length === 0) {
-        div.innerHTML = "<p style='color:#999; font-size:0.85em;'>Nenhum contato cadastrado ainda.</p>";
+        div.innerHTML = "<p style='color:var(--texto-suave); font-size:0.85em;'>Nenhum contato cadastrado ainda.</p>";
         return;
     }
 
     contatos.forEach(contato => {
         const label = document.createElement("label");
-        label.innerHTML = `<input type="checkbox" value="${contato.id}" ${idsMarcados.includes(contato.id) ? "checked" : ""}> ${contato.nome} <small style="color:#999;">(${contato.telefone})</small>`;
+        label.innerHTML = `<input type="checkbox" value="${contato.id}" ${idsMarcados.includes(contato.id) ? "checked" : ""}> ${contato.nome} <small style="color:var(--texto-suave);">(${contato.telefone})</small>`;
         div.appendChild(label);
     });
 }
@@ -820,13 +820,13 @@ function renderizarCheckboxListas(idsMarcados = []) {
     div.innerHTML = "";
 
     if (listasContatos.length === 0) {
-        div.innerHTML = "<p style='color:#999; font-size:0.85em;'>Nenhuma lista criada ainda.</p>";
+        div.innerHTML = "<p style='color:var(--texto-suave); font-size:0.85em;'>Nenhuma lista criada ainda.</p>";
         return;
     }
 
     listasContatos.forEach(lista => {
         const label = document.createElement("label");
-        label.innerHTML = `<input type="checkbox" value="${lista.id}" ${idsMarcados.includes(lista.id) ? "checked" : ""}> ${lista.nome} <small style="color:#999;">(${(lista.contatos || []).length} contato(s))</small>`;
+        label.innerHTML = `<input type="checkbox" value="${lista.id}" ${idsMarcados.includes(lista.id) ? "checked" : ""}> ${lista.nome} <small style="color:var(--texto-suave);">(${(lista.contatos || []).length} contato(s))</small>`;
         div.appendChild(label);
     });
 }
@@ -845,7 +845,7 @@ function atualizarContadorCaracteres() {
     const texto = document.getElementById("campoTexto").value;
     const contador = document.getElementById("contadorCaracteres");
     contador.textContent = `${texto.length} caracteres`;
-    contador.style.color = texto.length > 1024 ? "#e74c3c" : "";
+    contador.style.color = texto.length > 1024 ? "var(--vermelho)" : "";
 }
 
 document.getElementById("campoTexto").addEventListener("input", atualizarContadorCaracteres);

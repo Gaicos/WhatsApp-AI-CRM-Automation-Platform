@@ -40,10 +40,10 @@
       const ehSuper = c.papel === "superadmin" || c.id === "admin";
       const acesso = c.acesso || {};
       const statusBadge = ehSuper
-        ? `<span style="color:#0f766e; font-weight:700;">👑 Admin</span>`
+        ? `<span class="texto-sucesso">Admin</span>`
         : acesso.liberado
-          ? `<span style="color:#16a34a; font-weight:700;">✅ Ativo (${acesso.diasRestantes ?? "∞"}d)</span>`
-          : `<span style="color:#dc2626; font-weight:700;">⛔ ${escapeHtml(acesso.motivo || "Bloqueado")}</span>`;
+          ? `<span class="texto-sucesso">Ativo (${acesso.diasRestantes ?? "∞"}d)</span>`
+          : `<span class="texto-erro">${escapeHtml(acesso.motivo || "Bloqueado")}</span>`;
 
       const planoLabel = c.plano === "superadmin"
         ? "Admin"
@@ -52,32 +52,32 @@
           : "Grátis (7d)";
 
       const acoes = ehSuper
-        ? `<span style="color:#64748b; font-size:0.85em;">Conta principal</span>`
+        ? `<span class="meta-suave">Conta principal</span>`
         : `
           <div style="display:flex; flex-wrap:wrap; gap:4px;">
-            ${c.emailVerificado === false ? `<button type="button" class="botao-primario" data-adm-acao="verificarEmail" data-id="${escapeHtml(c.id)}">📧 Validar e-mail</button>` : ""}
+            ${c.emailVerificado === false ? `<button type="button" class="botao-primario" data-adm-acao="verificarEmail" data-id="${escapeHtml(c.id)}">Validar e-mail</button>` : ""}
             <button type="button" class="botao-primario" data-adm-acao="renovar" data-id="${escapeHtml(c.id)}" title="Adicionar +30 dias">+30d</button>
             <button type="button" class="botao-secundario" data-adm-acao="plano" data-id="${escapeHtml(c.id)}" data-plano="${c.plano === "pro" ? "free" : "pro"}">${c.plano === "pro" ? "Mudar p/ Grátis" : "Ativar Pro"}</button>
             <button type="button" class="botao-alerta" data-adm-acao="toggle" data-id="${escapeHtml(c.id)}" data-ativo="${c.ativo === false ? "1" : "0"}">${c.ativo === false ? "Reativar" : "Suspender"}</button>
-            <button type="button" class="botao-secundario" data-adm-acao="senha" data-id="${escapeHtml(c.id)}">🔑 Senha</button>
-            <button type="button" class="botao-perigo" data-adm-acao="excluir" data-id="${escapeHtml(c.id)}" data-nome="${escapeHtml(c.nome)}">🗑️</button>
+            <button type="button" class="botao-secundario" data-adm-acao="senha" data-id="${escapeHtml(c.id)}">Senha</button>
+            <button type="button" class="botao-perigo" data-adm-acao="excluir" data-id="${escapeHtml(c.id)}" data-nome="${escapeHtml(c.nome)}">Excluir</button>
           </div>
         `;
 
       const tagEmailPendente = c.emailVerificado === false
-        ? `<br><small style="color:#d97706; font-weight:600;">📧 Aguardando confirmação de e-mail</small>`
+        ? `<span class="tag-email-pendente">Aguardando confirmação de e-mail</span>`
         : "";
 
       return `
         <tr>
           <td>
-            <strong>${escapeHtml(c.nome)}</strong> <small style="color:#0f766e;">[${escapeHtml(c.codigoUnico || c.id)}]</small><br>
-            <small style="color:#64748b;">@${escapeHtml(c.usuario)}${c.email ? " · " + escapeHtml(c.email) : ""}</small>${tagEmailPendente}
+            <strong>${escapeHtml(c.nome)}</strong> <span class="codigo-id-mono">[${escapeHtml(c.codigoUnico || c.id)}]</span><br>
+            <span class="meta-suave">@${escapeHtml(c.usuario)}${c.email ? " · " + escapeHtml(c.email) : ""}</span>${tagEmailPendente}
           </td>
           <td>${escapeHtml(planoLabel)}</td>
           <td>${statusBadge}</td>
           <td>${escapeHtml(formatarDataBr(c.expiraEm))}</td>
-          <td>${c.whatsappConectado ? "🟢 Online" : "⚪ Offline"}</td>
+          <td>${c.whatsappConectado ? '<span class="status-pill-online">● Online</span>' : '<span class="status-pill-offline">○ Offline</span>'}</td>
           <td>${Number(c.qtdAgendamentos || 0)}</td>
           <td>${acoes}</td>
         </tr>

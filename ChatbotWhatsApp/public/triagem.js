@@ -475,7 +475,7 @@ async function carregarPausasHumano() {
             <tr>
               <td>
                 <strong>${escapar(item.nome || item.telefone)}</strong><br>
-                <a href="https://wa.me/${escapar(item.telefone)}" target="_blank" style="font-size:0.85em; color:var(--verde-escuro);">wa.me/${escapar(item.telefone)}</a>
+                <a href="https://wa.me/${escapar(item.telefone)}" target="_blank" style="font-size:0.85em; color:var(--verde-brilho);">wa.me/${escapar(item.telefone)}</a>
               </td>
               <td>${escapar(item.motivo || "-")}</td>
               <td>${escapar(item.ultimaMensagem || "-")}</td>

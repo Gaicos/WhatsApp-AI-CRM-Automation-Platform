@@ -125,18 +125,18 @@
     const overlay = document.createElement("div");
     overlay.id = "modalSupabaseCloud";
     overlay.style.cssText =
-      "position:fixed;inset:0;background:rgba(15,23,42,0.75);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;";
+      "position:fixed;inset:0;background:rgba(2,6,4,0.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;";
     overlay.innerHTML = `
-      <div style="background:#fff;border-radius:14px;max-width:480px;width:100%;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-family:system-ui,sans-serif;">
-        <h2 style="margin:0 0 8px 0;color:#0f172a;">☁️ Conectar Painel ao Supabase</h2>
-        <p style="margin:0 0 16px 0;color:#475569;font-size:0.92em;line-height:1.45;">
-          Você está acessando o painel no modo <strong>100% Online (GitHub Pages)</strong>. Informe a URL e a Publishable Key do seu projeto Supabase (esses dados ficam salvos apenas no seu navegador).
+      <div style="background:#0b120e;color:#e6f4ec;border:1px solid rgba(0,230,118,0.38);border-radius:16px;max-width:480px;width:100%;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,0.75),0 0 30px rgba(0,230,118,0.12);font-family:Inter,system-ui,sans-serif;">
+        <h2 style="margin:0 0 8px 0;color:#39ff88;">Conectar Painel ao Supabase</h2>
+        <p style="margin:0 0 16px 0;color:#829e8f;font-size:0.92em;line-height:1.45;">
+          Você está acessando o painel no modo <strong style="color:#e6f4ec;">100% Online (GitHub Pages)</strong>. Informe a URL e a Publishable Key do seu projeto Supabase (esses dados ficam salvos apenas no seu navegador).
         </p>
-        <label style="display:block;font-weight:600;font-size:0.88em;margin-bottom:4px;">URL do Projeto Supabase</label>
-        <input id="inputCloudSbUrl" type="url" placeholder="https://seu-projeto.supabase.co" value="${cfgAtual.url || ""}" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
-        <label style="display:block;font-weight:600;font-size:0.88em;margin-bottom:4px;">Publishable Key (sb_publishable_...)</label>
-        <input id="inputCloudSbKey" type="password" placeholder="sb_publishable_..." value="${cfgAtual.publishableKey || ""}" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
-        <button id="btnSalvarCloudSb" type="button" style="width:100%;padding:12px;background:#008069;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">🔗 Conectar ao Banco na Nuvem</button>
+        <label style="display:block;font-weight:600;font-size:0.88em;color:#829e8f;margin-bottom:4px;">URL do Projeto Supabase</label>
+        <input id="inputCloudSbUrl" type="url" placeholder="https://seu-projeto.supabase.co" value="${cfgAtual.url || ""}" style="width:100%;padding:10px;background:#070d0a;color:#e6f4ec;border:1px solid rgba(0,230,118,0.25);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
+        <label style="display:block;font-weight:600;font-size:0.88em;color:#829e8f;margin-bottom:4px;">Publishable Key (sb_publishable_...)</label>
+        <input id="inputCloudSbKey" type="password" placeholder="sb_publishable_..." value="${cfgAtual.publishableKey || ""}" style="width:100%;padding:10px;background:#070d0a;color:#e6f4ec;border:1px solid rgba(0,230,118,0.25);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+        <button id="btnSalvarCloudSb" type="button" style="width:100%;padding:12px;background:#00e676;color:#03150b;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Conectar ao Banco na Nuvem</button>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -405,15 +405,15 @@
         const blocoAvisoSql = document.getElementById("blocoAvisoSqlSupabase");
         if (!st.configurado) {
           boxStatus.textContent = "⚪ Não configurado (usando apenas arquivos locais)";
-          boxStatus.style.color = "#667781";
+          boxStatus.style.color = "#829e8f";
           if (blocoAvisoSql) blocoAvisoSql.classList.add("oculto");
         } else if (st.tabelasCriadas) {
           boxStatus.textContent = "🟢 Conectado e Sincronizado com o Supabase!";
-          boxStatus.style.color = "#008069";
+          boxStatus.style.color = "#39ff88";
           if (blocoAvisoSql) blocoAvisoSql.classList.add("oculto");
         } else {
           boxStatus.textContent = "🟡 Conectado ao Supabase — Falta criar as tabelas no SQL Editor (veja abaixo)";
-          boxStatus.style.color = "#d97706";
+          boxStatus.style.color = "#fbbf24";
           if (blocoAvisoSql) blocoAvisoSql.classList.remove("oculto");
         }
       } catch {}

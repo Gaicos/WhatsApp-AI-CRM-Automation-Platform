@@ -3,34 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Conectar WhatsApp — Painel do Bot</title>
+    <title>Conectar WhatsApp — Gaicos Bot</title>
     <link rel="stylesheet" href="style.css">
+    <script src="matrix-bg.js" defer></script>
 </head>
-<body class="pagina-login">
+<body class="pagina-login" data-matrix-opacity="0.16">
     <div class="caixa-login" style="max-width:460px;">
-        <h2>📱 Conectar ao WhatsApp</h2>
+        <div class="caixa-login-marca">
+            <span class="logo-bot" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="7" y="2" width="10" height="20" rx="2"/>
+                    <path d="M12 18h.01"/>
+                    <path d="M9.5 8.5l2.5 2.5 2.5-2.5"/>
+                </svg>
+            </span>
+            <div>
+                <h2>Conectar ao WhatsApp</h2>
+                <div class="marca-sub" style="justify-content:center;">
+                    <span class="ponto-live"></span> SESSÃO // PAREAMENTO
+                </div>
+            </div>
+        </div>
+
         <p class="texto-ajuda">No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho, e escaneie o código abaixo.</p>
         <img id="qrImg" class="qr-img" alt="QR Code" style="display:none;">
         <p id="statusConectar" class="status-login">Verificando conexão...</p>
 
         <div class="linha-acoes centro">
-            <button type="button" id="btnLigarConectar" class="botao-secundario">▶️ Ligar bot</button>
-            <button type="button" id="btnNovoQr" class="botao-secundario">🔄 Gerar novo QR Code</button>
+            <button type="button" id="btnLigarConectar" class="botao-primario">Ligar bot</button>
+            <button type="button" id="btnNovoQr" class="botao-secundario">Gerar novo QR Code</button>
             <button type="button" id="btnSairConectar" class="botao-perigo">Sair</button>
         </div>
 
-        <details style="margin-top:18px; text-align:left; border:1px solid var(--borda); border-radius:10px; padding:10px 14px; background:#f8fafc;">
-            <summary style="cursor:pointer; font-weight:600; color:#0f172a;">📲 Não conseguiu ler o QR Code? Conecte pelo número (8 dígitos)</summary>
+        <details class="caixa-pareamento">
+            <summary>Não conseguiu ler o QR Code? Conecte pelo número (8 dígitos)</summary>
             <p class="texto-ajuda" style="margin:8px 0;">
                 No celular, ao clicar em <strong>Conectar um aparelho</strong>, toque em <strong>"Conectar com número de telefone"</strong> na parte inferior e digite o código gerado abaixo:
             </p>
             <div style="display:flex; gap:8px;">
-                <input type="text" id="campoTelPareamento" placeholder="5511999999999" style="flex:1; margin:0;">
+                <input type="text" id="campoTelPareamento" placeholder="5511999999999" style="flex:1; margin:0; font-family:var(--mono);">
                 <button type="button" id="btnGerarCodigoPareamento" class="botao-primario">Gerar código</button>
             </div>
-            <div id="boxCodigoPareamento" class="oculto" style="margin-top:10px; padding:12px; background:#dcfce7; border:1px solid #86efac; border-radius:8px; text-align:center;">
-                <div style="font-size:0.82em; color:#166534;">Digite este código no seu WhatsApp:</div>
-                <div id="valorCodigoPareamento" style="font-size:1.7em; font-weight:800; letter-spacing:4px; color:#075E54; margin-top:4px;"></div>
+            <div id="boxCodigoPareamento" class="box-codigo-pareamento oculto">
+                <div class="box-codigo-pareamento-legenda">Digite este código no seu WhatsApp:</div>
+                <div id="valorCodigoPareamento" class="valor-codigo-pareamento"></div>
             </div>
             <p id="erroCodigoPareamento" class="erro-login" style="margin-top:6px;"></p>
         </details>
@@ -38,17 +54,17 @@
 
     <div id="modalAvisoDemoConectar" class="overlay oculto">
         <div class="modal" style="max-width:440px;">
-            <h2 style="margin-top:0; color:#d97706;">⚠️ Você está usando uma conta DEMO</h2>
-            <p style="color:#475569; line-height:1.5;">
+            <h2 class="texto-alerta" style="margin-top:0;">Você está usando uma conta DEMO</h2>
+            <p class="texto-ajuda">
                 Bem-vindo(a)! Esta é uma <strong>conta DEMO gratuita válida por 7 dias</strong> para você testar a plataforma com segurança:
             </p>
-            <div id="demoCodigoConectar" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px; font-weight:700; margin-bottom:12px;"></div>
-            <ul style="color:#475569; font-size:0.9em; padding-left:18px; line-height:1.55;">
+            <div id="demoCodigoConectar" class="bloco-codigo-destaque"></div>
+            <ul class="texto-ajuda" style="padding-left:18px; line-height:1.6;">
                 <li>1 agendamento automático</li>
-                <li>Até 2 grupos ou 3 contatos • 1 mídia por envio</li>
+                <li>Até 2 grupos ou 3 contatos · 1 mídia por envio</li>
                 <li>Triagem inteligente local no seu WhatsApp</li>
             </ul>
-            <button type="button" id="btnConfirmarDemoConectar" class="botao-primario largura-total">✅ Entendi, continuar na conta DEMO</button>
+            <button type="button" id="btnConfirmarDemoConectar" class="botao-primario largura-total">Entendi, continuar na conta DEMO</button>
         </div>
     </div>
 
@@ -78,13 +94,14 @@
                 }
 
                 if (dados.conectado) {
-                    statusEl.textContent = "✅ Conectado! Redirecionando...";
+                    statusEl.style.color = "var(--verde-brilho)";
+                    statusEl.textContent = "Conectado! Redirecionando...";
                     setTimeout(() => { window.location.href = "./"; }, 800);
                     return;
                 }
                 if (dados.erro && !dados.qr) {
                     statusEl.textContent = dados.erro;
-                    statusEl.style.color = "#e74c3c";
+                    statusEl.style.color = "var(--vermelho)";
                 } else if (dados.qr) {
                     statusEl.style.color = "";
                     if (dados.qr !== ultimoQr) {

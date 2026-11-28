@@ -83,13 +83,13 @@
         const chaveSafe = escapeHtml(chave);
         const tplSafe = escapeHtml(cfg.template || "");
         return `
-          <div style="border:1px solid var(--borda); border-radius:10px; padding:12px; margin-bottom:10px; background:#f8fafc;">
-            <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+          <div class="card-evento-webhook">
+            <div class="card-evento-webhook-topo">
               <div>
                 <strong>${rotulo}</strong>
-                <code style="margin-left:6px; background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size:0.85em;">${chaveSafe}</code>
+                <code style="margin-left:6px;">${chaveSafe}</code>
               </div>
-              <div style="display:flex; gap:14px; flex-wrap:wrap;">
+              <div class="card-evento-webhook-checks">
                 <label class="check-ativo" style="margin:0;">
                   <input type="checkbox" data-evento-ativo="${chaveSafe}" ${cfg.ativo !== false ? "checked" : ""}> Ativo
                 </label>
@@ -127,7 +127,7 @@
           const quando = item.recebidoEm ? new Date(item.recebidoEm).toLocaleString("pt-BR") : "-";
           const cliente = [item.nome, item.telefone].filter(Boolean).join(" / ") || "-";
           const corStatus =
-            item.status === "enviado" ? "#16a34a" : item.status === "erro" ? "#dc2626" : "#d97706";
+            item.status === "enviado" ? "#39ff88" : item.status === "erro" ? "#fda4af" : "#fcd34d";
           return `
             <tr>
               <td>${escapeHtml(quando)}</td>
@@ -269,22 +269,22 @@
         });
         const dados = await resp.json();
         if (box) {
-          box.classList.remove("oculto");
+          box.classList.remove("oculto", "resultado-ok", "resultado-aviso", "resultado-erro");
           if (resp.ok && dados.ok) {
-            box.style.background = dados.ignorado ? "#fef3c7" : "#dcf8c6";
+            box.classList.add(dados.ignorado ? "resultado-aviso" : "resultado-ok");
             box.textContent = dados.ignorado
               ? `Ignorado: ${dados.motivo}`
               : `✅ Enviado! (${dados.enviadoCliente ? "Cliente notificado" : ""}${dados.enviadoCliente && dados.avisadoGrupo ? " + " : ""}${dados.avisadoGrupo ? "Grupo alertado" : ""})\n\nTexto:\n${dados.mensagemEnviada || ""}`;
           } else {
-            box.style.background = "#fee2e2";
+            box.classList.add("resultado-erro");
             box.textContent = `❌ Erro: ${dados.erro || "Falha ao testar webhook."}`;
           }
         }
         await carregarEventosRecebidos();
       } catch (err) {
         if (box) {
-          box.classList.remove("oculto");
-          box.style.background = "#fee2e2";
+          box.classList.remove("oculto", "resultado-ok", "resultado-aviso", "resultado-erro");
+          box.classList.add("resultado-erro");
           box.textContent = `❌ Erro de comunicação: ${err.message}`;
         }
       } finally {
