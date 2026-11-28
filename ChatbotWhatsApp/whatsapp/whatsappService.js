@@ -32,6 +32,8 @@ function obterEstado(tenantId = obterTenantAtual()) {
         st = {
             tenantId: tid,
             sockAtual: null,
+            conectando: false,
+            ultimoSalvamentoCreds: Promise.resolve(),
             desligadoManualmente: false,
             sessaoInvalida: false,
             whatsappConectado: false,
@@ -97,148 +99,229 @@ export async function conectarWhatsApp(tenantId = obterTenantAtual()) {
     const tid = normalizarTenantId(tenantId);
     const st = obterEstado(tid);
 
+    if (st.conectando) {
+        return st.sockAtual;
+    }
+
+    st.conectando = true;
     st.desligadoManualmente = false;
     st.sessaoInvalida = false;
     st.whatsappConectado = false;
     st.qrAtual = null;
 
-    if (st.sockAtual) {
-        try { st.sockAtual.end(new Error("Reconectando sessão")); } catch {}
-        st.sockAtual = null;
-    }
-
+    let sock;
+    let pastaLocal = pastaAuthLocalTenant(tid);
     const prefixo = prefixoAuthWhatsappTenant(tid);
-    const pastaLocal = pastaAuthLocalTenant(tid);
-    const usandoSupabaseAuth = deveUsarAuthSupabase(pastaLocal);
+    let usandoSupabaseAuth = false;
 
-    let state;
-    let saveCreds;
-    if (usandoSupabaseAuth) {
-        const authNuvem = await useSupabaseAuthState(null, prefixo);
-        state = authNuvem.state;
-        saveCreds = authNuvem.saveCreds;
-        console.log(`☁️ [${tid}] Usando sessão do WhatsApp 100% na nuvem (Supabase).`);
-    } else {
-        await restaurarAuthWhatsappDoSupabase(pastaLocal, prefixo);
-        const authLocal = await useMultiFileAuthState(pastaLocal);
-        state = authLocal.state;
-        saveCreds = authLocal.saveCreds;
-    }
-
-    st.credenciaisAtuais = state.creds;
-    const minhaGeracao = ++st.geracaoAtual;
-
-    const versao = await obterVersaoWhatsapp();
-    const sock = versao
-        ? makeWASocket({ auth: state, version: versao, logger: loggerBaileys })
-        : makeWASocket({ auth: state, logger: loggerBaileys });
-    st.sockAtual = sock;
-
-    sock.ev.on("creds.update", () => executarNoTenant(tid, async () => {
-        await saveCreds();
-        if (!usandoSupabaseAuth) {
-            await salvarCredsWhatsappNoSupabase(pastaLocal, prefixo);
-        }
-    }));
-
-    // Grupos chegam aos poucos durante a sincronização; guarda os que forem recebidos.
-    const registrarGrupos = (lista) => {
-        for (const g of lista || []) {
-            if (g?.id) st.gruposRecebidos.set(g.id, { subject: g.subject, announce: !!g.announce, isCommunity: !!g.isCommunity });
-        }
-    };
-    sock.ev.on("groups.upsert", registrarGrupos);
-    sock.ev.on("groups.update", registrarGrupos);
-
-    sock.ev.on("connection.update", (update) => executarNoTenant(tid, async () => {
-        if (minhaGeracao !== st.geracaoAtual) return;
-        const { connection, qr, lastDisconnect } = update;
-
-        if (qr) {
-            if (tid === "admin") qrcodeTerminal.generate(qr, { small: true });
-            try {
-                st.qrAtual = await QRCode.toDataURL(qr);
-            } catch (err) {
-                console.log(`[${tid}] Erro ao gerar imagem do QR Code:`, err.message);
-            }
-        }
-
-        if (connection === "open") {
-            st.whatsappConectado = true;
-            st.qrAtual = null;
-            st.sessaoInvalida = false;
-            st.tentativasFalhas = 0;
-            st.erroConexao = null;
-            if (!usandoSupabaseAuth) {
-                salvarCredsWhatsappNoSupabase(pastaLocal, prefixo);
-            }
-            console.log(`✅ [${tid}] WhatsApp conectado e pronto para enviar mensagens.`);
-        }
-
-        if (connection === "close") {
-            st.whatsappConectado = false;
-            st.qrAtual = null;
+    try {
+        if (st.sockAtual) {
+            try { st.sockAtual.end(new Error("Reconectando sessão")); } catch {}
             st.sockAtual = null;
+        }
 
-            if (st.desligadoManualmente) {
-                console.log(`🔌 [${tid}] Bot desligado manualmente — não vai reconectar sozinho.`);
-                return;
-            }
+        usandoSupabaseAuth = deveUsarAuthSupabase(pastaLocal);
 
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const deveReconectar = statusCode !== DisconnectReason.loggedOut;
+        let state;
+        let saveCreds;
+        if (usandoSupabaseAuth) {
+            const authNuvem = await useSupabaseAuthState(null, prefixo);
+            state = authNuvem.state;
+            saveCreds = authNuvem.saveCreds;
+            console.log(`☁️ [${tid}] Usando sessão do WhatsApp 100% na nuvem (Supabase).`);
+        } else {
+            await restaurarAuthWhatsappDoSupabase(pastaLocal, prefixo);
+            const authLocal = await useMultiFileAuthState(pastaLocal);
+            state = authLocal.state;
+            saveCreds = authLocal.saveCreds;
+        }
 
-            console.log(`❌ [${tid}] Conexão encerrada (código ${statusCode}).`);
+        st.credenciaisAtuais = state.creds;
+        const minhaGeracao = ++st.geracaoAtual;
 
-            if (statusCode === 440) {
-                st.erroConexao = "Outro aparelho/instância assumiu esta conta do WhatsApp. Feche o outro e clique em Ligar.";
-                console.log(`⛔ [${tid}] Conflito 440 no WhatsApp. Não vou reconectar automaticamente.`);
-                return;
-            }
+        const versao = await obterVersaoWhatsapp();
+        const browserConfig = baileysLib.Browsers?.ubuntu?.("Chrome") || ["Ubuntu", "Chrome", "22.04.4"];
+        sock = makeWASocket({
+            auth: state,
+            ...(versao ? { version: versao } : {}),
+            browser: browserConfig,
+            logger: loggerBaileys,
+            syncFullHistory: false,
+            markOnlineOnConnect: false,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000
+        });
+        st.sockAtual = sock;
 
-            if (deveReconectar) {
-                st.tentativasFalhas++;
-                const pareando = !st.credenciaisAtuais?.registered;
-
-                if (statusCode === 405) {
-                    st.erroConexao = "O WhatsApp recusou a conexão (código 405).";
-                } else if (pareando) {
-                    st.erroConexao = null;
-                } else {
-                    st.erroConexao = `Não foi possível conectar (código ${statusCode}).`;
+        sock.ev.on("creds.update", () => {
+            const tarefa = executarNoTenant(tid, async () => {
+                await saveCreds();
+                if (!usandoSupabaseAuth) {
+                    await salvarCredsWhatsappNoSupabase(pastaLocal, prefixo);
                 }
+            }).catch(() => {});
+            st.ultimoSalvamentoCreds = tarefa;
+            return tarefa;
+        });
 
-                if (!pareando && st.tentativasFalhas >= MAX_TENTATIVAS) {
-                    console.log(`⛔ [${tid}] Muitas tentativas sem sucesso. Use o botão Ligar ou Gerar novo QR Code.`);
+        // Grupos chegam aos poucos durante a sincronização; guarda os que forem recebidos.
+        const registrarGrupos = (lista) => {
+            for (const g of lista || []) {
+                if (g?.id) st.gruposRecebidos.set(g.id, { subject: g.subject, announce: !!g.announce, isCommunity: !!g.isCommunity });
+            }
+        };
+        sock.ev.on("groups.upsert", registrarGrupos);
+        sock.ev.on("groups.update", registrarGrupos);
+
+        sock.ev.on("connection.update", (update) => executarNoTenant(tid, async () => {
+            if (minhaGeracao !== st.geracaoAtual) return;
+            const { connection, qr, lastDisconnect } = update;
+
+            if (qr) {
+                if (tid === "admin") qrcodeTerminal.generate(qr, { small: true });
+                try {
+                    st.qrAtual = await QRCode.toDataURL(qr, {
+                        width: 360,
+                        margin: 3,
+                        errorCorrectionLevel: "M",
+                        color: { dark: "#000000", light: "#ffffff" }
+                    });
+                } catch (err) {
+                    console.log(`[${tid}] Erro ao gerar imagem do QR Code:`, err.message);
+                }
+            }
+
+            if (connection === "open") {
+                st.whatsappConectado = true;
+                st.qrAtual = null;
+                st.sessaoInvalida = false;
+                st.tentativasFalhas = 0;
+                st.erroConexao = null;
+                if (!usandoSupabaseAuth) {
+                    salvarCredsWhatsappNoSupabase(pastaLocal, prefixo);
+                }
+                console.log(`✅ [${tid}] WhatsApp conectado e pronto para enviar mensagens.`);
+            }
+
+            if (connection === "close") {
+                st.whatsappConectado = false;
+                st.qrAtual = null;
+                st.sockAtual = null;
+
+                if (st.desligadoManualmente) {
+                    console.log(`🔌 [${tid}] Bot desligado manualmente — não vai reconectar sozinho.`);
                     return;
                 }
-                const espera = pareando
-                    ? Math.min(2000 * st.tentativasFalhas, 15000)
-                    : esperaEntreTentativas(st.tentativasFalhas);
-                console.log(`[${tid}] ${pareando ? "Gerando novo QR Code" : "Nova tentativa"} em ${espera / 1000}s...`);
-                setTimeout(() => {
-                    conectarWhatsApp(tid).catch(err => console.log(`[${tid}] Erro ao reconectar:`, err.message));
-                }, espera);
-            } else {
-                st.sessaoInvalida = true;
-                fs.rmSync(pastaLocal, { recursive: true, force: true });
-                await limparAuthWhatsappNoSupabase(prefixo);
-                console.log(`⚠️ [${tid}] Sessão encerrada pelo WhatsApp. Credenciais removidas; gerando novo QR Code...`);
-                setTimeout(() => {
-                    conectarWhatsApp(tid).catch(err => console.log(`[${tid}] Erro ao regenerar QR:`, err.message));
-                }, 1000);
+
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+
+                // Código 515 (restartRequired) faz parte do handshake normal após ler o QR Code
+                if (statusCode === DisconnectReason.restartRequired || statusCode === 515) {
+                    console.log(`🔄 [${tid}] Reinício de pareamento solicitado pelo WhatsApp (515). Aguardando gravação de credenciais...`);
+                    await st.ultimoSalvamentoCreds.catch(() => {});
+                    setTimeout(() => {
+                        conectarWhatsApp(tid).catch(err => console.log(`[${tid}] Erro ao reconectar após 515:`, err.message));
+                    }, 500);
+                    return;
+                }
+
+                const deveReconectar = statusCode !== DisconnectReason.loggedOut;
+
+                console.log(`❌ [${tid}] Conexão encerrada (código ${statusCode}).`);
+
+                if (statusCode === 440) {
+                    st.erroConexao = "Outro aparelho/instância assumiu esta conta do WhatsApp. Feche o outro e clique em Ligar.";
+                    console.log(`⛔ [${tid}] Conflito 440 no WhatsApp. Não vou reconectar automaticamente.`);
+                    return;
+                }
+
+                if (deveReconectar) {
+                    st.tentativasFalhas++;
+                    const pareando = !st.credenciaisAtuais?.registered;
+
+                    if (statusCode === 405) {
+                        st.erroConexao = "O WhatsApp recusou a conexão (código 405).";
+                    } else if (pareando) {
+                        st.erroConexao = null;
+                    } else {
+                        st.erroConexao = `Não foi possível conectar (código ${statusCode}).`;
+                    }
+
+                    if (!pareando && st.tentativasFalhas >= MAX_TENTATIVAS) {
+                        console.log(`⛔ [${tid}] Muitas tentativas sem sucesso. Use o botão Ligar ou Gerar novo QR Code.`);
+                        return;
+                    }
+                    const espera = pareando
+                        ? Math.min(2000 * st.tentativasFalhas, 15000)
+                        : esperaEntreTentativas(st.tentativasFalhas);
+                    console.log(`[${tid}] ${pareando ? "Gerando novo QR Code" : "Nova tentativa"} em ${espera / 1000}s...`);
+                    setTimeout(() => {
+                        conectarWhatsApp(tid).catch(err => console.log(`[${tid}] Erro ao reconectar:`, err.message));
+                    }, espera);
+                } else {
+                    st.sessaoInvalida = true;
+                    fs.rmSync(pastaLocal, { recursive: true, force: true });
+                    await limparAuthWhatsappNoSupabase(prefixo);
+                    console.log(`⚠️ [${tid}] Sessão encerrada pelo WhatsApp. Credenciais removidas; gerando novo QR Code...`);
+                    setTimeout(() => {
+                        conectarWhatsApp(tid).catch(err => console.log(`[${tid}] Erro ao regenerar QR:`, err.message));
+                    }, 1000);
+                }
             }
-        }
-    }));
+        }));
 
-    sock.ev.on("messages.upsert", ({ messages, type }) => executarNoTenant(tid, async () => {
-        if (type && type !== "notify") return;
-        for (const msg of messages) {
-            await processarComando(sock, msg, tid);
-        }
-    }));
+        sock.ev.on("messages.upsert", ({ messages, type }) => executarNoTenant(tid, async () => {
+            if (type && type !== "notify") return;
+            for (const msg of messages) {
+                await processarComando(sock, msg, tid);
+            }
+        }));
 
-    return sock;
+        return sock;
+    } finally {
+        st.conectando = false;
+    }
+}
+
+/**
+ * Alternativa sem câmera ao QR Code: gera código de pareamento de 8 dígitos para o celular.
+ */
+export async function solicitarCodigoPareamento(telefone, tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
+
+    if (st.whatsappConectado) {
+        throw new Error("Este WhatsApp já está conectado.");
+    }
+
+    let digits = String(telefone || "").replace(/\D/g, "");
+    if (digits.startsWith("0") && (digits.length === 11 || digits.length === 12)) {
+        digits = digits.slice(1);
+    }
+    if (digits.length === 10 || digits.length === 11) {
+        digits = `55${digits}`;
+    }
+    if (digits.length < 10 || digits.length > 15) {
+        throw new Error("Informe um número válido com DDD (ex: 5511999999999).");
+    }
+
+    if (st.sockAtual) {
+        try { st.sockAtual.end(new Error("Solicitando código de pareamento")); } catch {}
+        st.sockAtual = null;
+    }
+    fs.rmSync(pastaAuthLocalTenant(tid), { recursive: true, force: true });
+    await limparAuthWhatsappNoSupabase(prefixoAuthWhatsappTenant(tid));
+
+    const sock = await conectarWhatsApp(tid);
+    if (!sock || typeof sock.requestPairingCode !== "function") {
+        throw new Error("Não foi possível inicializar o pareamento por código neste momento.");
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const bruto = await sock.requestPairingCode(digits);
+    const limpo = String(bruto || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    const formatado = limpo.length === 8 ? `${limpo.slice(0, 4)}-${limpo.slice(4)}` : limpo;
+    return { ok: true, codigo: formatado, telefone: digits };
 }
 
 export function getQrAtual(tenantId = obterTenantAtual()) {

@@ -7,15 +7,48 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="pagina-login">
-    <div class="caixa-login">
+    <div class="caixa-login" style="max-width:460px;">
         <h2>📱 Conectar ao WhatsApp</h2>
-        <p class="texto-ajuda">No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho, e escaneie o código.</p>
+        <p class="texto-ajuda">No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho, e escaneie o código abaixo.</p>
         <img id="qrImg" class="qr-img" alt="QR Code" style="display:none;">
         <p id="statusConectar" class="status-login">Verificando conexão...</p>
+
         <div class="linha-acoes centro">
             <button type="button" id="btnLigarConectar" class="botao-secundario">▶️ Ligar bot</button>
             <button type="button" id="btnNovoQr" class="botao-secundario">🔄 Gerar novo QR Code</button>
             <button type="button" id="btnSairConectar" class="botao-perigo">Sair</button>
+        </div>
+
+        <details style="margin-top:18px; text-align:left; border:1px solid var(--borda); border-radius:10px; padding:10px 14px; background:#f8fafc;">
+            <summary style="cursor:pointer; font-weight:600; color:#0f172a;">📲 Não conseguiu ler o QR Code? Conecte pelo número (8 dígitos)</summary>
+            <p class="texto-ajuda" style="margin:8px 0;">
+                No celular, ao clicar em <strong>Conectar um aparelho</strong>, toque em <strong>"Conectar com número de telefone"</strong> na parte inferior e digite o código gerado abaixo:
+            </p>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="campoTelPareamento" placeholder="5511999999999" style="flex:1; margin:0;">
+                <button type="button" id="btnGerarCodigoPareamento" class="botao-primario">Gerar código</button>
+            </div>
+            <div id="boxCodigoPareamento" class="oculto" style="margin-top:10px; padding:12px; background:#dcfce7; border:1px solid #86efac; border-radius:8px; text-align:center;">
+                <div style="font-size:0.82em; color:#166534;">Digite este código no seu WhatsApp:</div>
+                <div id="valorCodigoPareamento" style="font-size:1.7em; font-weight:800; letter-spacing:4px; color:#075E54; margin-top:4px;"></div>
+            </div>
+            <p id="erroCodigoPareamento" class="erro-login" style="margin-top:6px;"></p>
+        </details>
+    </div>
+
+    <div id="modalAvisoDemoConectar" class="overlay oculto">
+        <div class="modal" style="max-width:440px;">
+            <h2 style="margin-top:0; color:#d97706;">⚠️ Você está usando uma conta DEMO</h2>
+            <p style="color:#475569; line-height:1.5;">
+                Bem-vindo(a)! Esta é uma <strong>conta DEMO gratuita válida por 7 dias</strong> para você testar a plataforma com segurança:
+            </p>
+            <div id="demoCodigoConectar" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px; font-weight:700; margin-bottom:12px;"></div>
+            <ul style="color:#475569; font-size:0.9em; padding-left:18px; line-height:1.55;">
+                <li>1 agendamento automático</li>
+                <li>Até 2 grupos ou 3 contatos • 1 mídia por envio</li>
+                <li>Triagem inteligente local no seu WhatsApp</li>
+            </ul>
+            <button type="button" id="btnConfirmarDemoConectar" class="botao-primario largura-total">✅ Entendi, continuar na conta DEMO</button>
         </div>
     </div>
 
@@ -23,13 +56,27 @@
     <script>
         const statusEl = document.getElementById("statusConectar");
         const qrImg = document.getElementById("qrImg");
+        let ultimoQr = "";
 
         async function verificar() {
             try {
                 const sessao = await fetch("/api/sessao").then(r => r.json());
                 if (!sessao.logado) { window.location.href = "./login.html"; return; }
 
-                const dados = await fetch("/api/qr").then(r => r.json());
+                if (sessao.tenant?.plano === "free" && sessao.tenant?.avisoDemoVisto === false) {
+                    const modalDemo = document.getElementById("modalAvisoDemoConectar");
+                    const codEl = document.getElementById("demoCodigoConectar");
+                    if (codEl) codEl.textContent = `Código único da sua conta: ${sessao.tenant.codigoUnico || "-"}`;
+                    modalDemo?.classList.remove("oculto");
+                }
+
+                const respQr = await fetch("/api/qr");
+                const dados = await respQr.json();
+                if (!respQr.ok && dados.bloqueado) {
+                    window.location.href = "./";
+                    return;
+                }
+
                 if (dados.conectado) {
                     statusEl.textContent = "✅ Conectado! Redirecionando...";
                     setTimeout(() => { window.location.href = "./"; }, 800);
@@ -40,19 +87,27 @@
                     statusEl.style.color = "#e74c3c";
                 } else if (dados.qr) {
                     statusEl.style.color = "";
-                    qrImg.src = dados.qr;
+                    if (dados.qr !== ultimoQr) {
+                        ultimoQr = dados.qr;
+                        qrImg.src = dados.qr;
+                    }
                     qrImg.style.display = "block";
                     statusEl.textContent = "Aguardando leitura do QR Code...";
                 } else if (dados.sessaoInvalida) {
                     statusEl.textContent = "Sessão encerrada pelo WhatsApp. Gerando novo QR Code, aguarde...";
                 } else {
-                    statusEl.textContent = "Gerando QR Code, aguarde... (se o bot estiver desligado, clique em Ligar)";
+                    statusEl.textContent = "Gerando QR Code, aguarde...";
                 }
             } catch (err) {
                 statusEl.textContent = "Erro ao consultar status: " + err.message;
             }
-            setTimeout(verificar, 2000);
+            setTimeout(verificar, 2500);
         }
+
+        document.getElementById("btnConfirmarDemoConectar")?.addEventListener("click", async () => {
+            await fetch("/api/conta/confirmar-aviso-demo", { method: "POST" }).catch(() => {});
+            document.getElementById("modalAvisoDemoConectar")?.classList.add("oculto");
+        });
 
         document.getElementById("btnLigarConectar").addEventListener("click", () => {
             fetch("/api/bot/ligar", { method: "POST" });
@@ -60,10 +115,42 @@
         });
 
         document.getElementById("btnNovoQr").addEventListener("click", async () => {
+            ultimoQr = "";
             qrImg.style.display = "none";
             statusEl.style.color = "";
             statusEl.textContent = "Gerando novo QR Code, aguarde...";
             await fetch("/api/bot/novo-qr", { method: "POST" });
+        });
+
+        document.getElementById("btnGerarCodigoPareamento").addEventListener("click", async () => {
+            const btn = document.getElementById("btnGerarCodigoPareamento");
+            const erroEl = document.getElementById("erroCodigoPareamento");
+            const box = document.getElementById("boxCodigoPareamento");
+            const valEl = document.getElementById("valorCodigoPareamento");
+            const tel = document.getElementById("campoTelPareamento").value.trim();
+
+            erroEl.textContent = "";
+            box.classList.add("oculto");
+            btn.disabled = true;
+            try {
+                const resp = await fetch("/api/bot/codigo-pareamento", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ telefone: tel })
+                });
+                const dados = await resp.json().catch(() => ({}));
+                if (!resp.ok || !dados.ok) {
+                    erroEl.textContent = dados.erro || "Não foi possível gerar o código.";
+                    return;
+                }
+                valEl.textContent = dados.codigo;
+                box.classList.remove("oculto");
+                statusEl.textContent = "Código gerado! Digite os 8 caracteres no WhatsApp do seu celular.";
+            } catch (err) {
+                erroEl.textContent = "Erro ao solicitar código: " + err.message;
+            } finally {
+                btn.disabled = false;
+            }
         });
 
         document.getElementById("btnSairConectar").addEventListener("click", async () => {

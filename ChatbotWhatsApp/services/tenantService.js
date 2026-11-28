@@ -89,6 +89,37 @@ function somarDiasIso(baseMs, dias) {
   return new Date(baseMs + d * 24 * 60 * 60 * 1000).toISOString();
 }
 
+function gerarCodigoUnicoUsuario(plano, listaExistente = []) {
+  const prefixo = plano === "superadmin" ? "ADM" : plano === "pro" ? "PRO" : "DEMO";
+  const usados = new Set(listaExistente.map((t) => t.codigoUnico).filter(Boolean));
+  let candidato = `${prefixo}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+  while (usados.has(candidato)) {
+    candidato = `${prefixo}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+  }
+  return candidato;
+}
+
+function gerarCodigoEmail6Digitos() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function gerarTokenEmail() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function validarFormatoEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || "").trim());
+}
+
+function igualTextoSeguro(a, b) {
+  const s1 = String(a || "");
+  const s2 = String(b || "");
+  if (!s1 || !s2) return false;
+  const b1 = Buffer.from(s1, "utf-8");
+  const b2 = Buffer.from(s2, "utf-8");
+  return b1.length === b2.length && crypto.timingSafeEqual(b1, b2);
+}
+
 export async function garantirTenantsIniciais() {
   fs.mkdirSync("./data", { recursive: true });
   const lista = lerListaTenants();
@@ -126,6 +157,9 @@ export async function garantirTenantsIniciais() {
     nome: "Gaicos Store (Admin)",
     usuario,
     email: "",
+    codigoUnico: "ADM-GAICOS",
+    emailVerificado: true,
+    avisoDemoVisto: true,
     salt,
     hash,
     precisaTrocarSenha,
@@ -224,8 +258,22 @@ export function listarTenants() {
 
 export function sanitizarTenantPublico(tenant) {
   if (!tenant) return null;
-  const { salt, hash, ...resto } = tenant;
-  return resto;
+  const {
+    salt,
+    hash,
+    codigoVerificacaoEmail,
+    tokenVerificacaoEmail,
+    verificacaoExpiraEm,
+    ...resto
+  } = tenant;
+  const prefixoFallback = tenant.papel === "superadmin" ? "ADM" : tenant.plano === "pro" ? "PRO" : "DEMO";
+  const sufixoFallback = String(tenant.id || "0000").replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase() || "000000";
+  return {
+    ...resto,
+    codigoUnico: resto.codigoUnico || `${prefixoFallback}-${sufixoFallback}`,
+    emailVerificado: resto.emailVerificado !== false,
+    avisoDemoVisto: resto.avisoDemoVisto === true || resto.plano !== "free"
+  };
 }
 
 export function obterTenantPorId(id) {
@@ -331,12 +379,19 @@ export async function registrarContaGratuita({ nome, usuario, email = "", senha 
   const erroUsuario = validarUsuarioBasico(usuarioLimpo);
   if (erroUsuario) return { ok: false, erro: erroUsuario };
 
+  if (!validarFormatoEmail(emailLimpo)) {
+    return { ok: false, erro: "Informe um e-mail válido para enviarmos o código de validação." };
+  }
+
   const erroSenha = validarNovaSenha(senha, usuarioLimpo);
   if (erroSenha) return { ok: false, erro: erroSenha };
 
   const lista = lerListaTenants();
   if (lista.some((t) => String(t.usuario).toLowerCase() === usuarioLimpo.toLowerCase())) {
     return { ok: false, erro: "Este nome de usuário já está em uso. Escolha outro." };
+  }
+  if (lista.some((t) => String(t.email || "").trim().toLowerCase() === emailLimpo)) {
+    return { ok: false, erro: "Já existe uma conta cadastrada com este e-mail." };
   }
 
   const maxContasFree = Math.max(1, Number(process.env.MAX_CONTAS_FREE_ATIVAS || 10));
@@ -350,12 +405,22 @@ export async function registrarContaGratuita({ nome, usuario, email = "", senha 
   const agoraMs = Date.now();
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = await hashSenha(senha, salt);
+  const codigo = gerarCodigoEmail6Digitos();
+  const token = gerarTokenEmail();
+  const verificacaoExpiraEm = new Date(agoraMs + 30 * 60 * 1000).toISOString();
+  const codigoUnico = gerarCodigoUnicoUsuario("free", lista);
 
   const novo = {
     id: gerarIdTenantUnico(usuarioLimpo, lista),
     nome: nomeLimpo,
     usuario: usuarioLimpo,
     email: emailLimpo,
+    codigoUnico,
+    emailVerificado: false,
+    codigoVerificacaoEmail: codigo,
+    tokenVerificacaoEmail: token,
+    verificacaoExpiraEm,
+    avisoDemoVisto: false,
     salt,
     hash,
     precisaTrocarSenha: false,
@@ -369,7 +434,126 @@ export async function registrarContaGratuita({ nome, usuario, email = "", senha 
 
   lista.push(novo);
   salvarListaTenants(lista);
-  return { ok: true, tenant: sanitizarTenantPublico(novo) };
+  return {
+    ok: true,
+    tenant: sanitizarTenantPublico(novo),
+    verificacao: { codigo, token, expiraEm: verificacaoExpiraEm }
+  };
+}
+
+export function verificarEmailPorCodigoOuToken({ usuarioOuEmail = "", codigo = "", token = "" }) {
+  const lista = lerListaTenants();
+  const tokenLimpo = String(token || "").trim();
+  const codigoLimpo = String(codigo || "").replace(/\D/g, "");
+  const identLimpo = String(usuarioOuEmail || "").trim().toLowerCase();
+
+  let idx = -1;
+  if (tokenLimpo) {
+    idx = lista.findIndex((t) => t.tokenVerificacaoEmail && igualTextoSeguro(t.tokenVerificacaoEmail, tokenLimpo));
+  } else if (identLimpo && codigoLimpo) {
+    idx = lista.findIndex((t) => {
+      const bateUsuario =
+        String(t.usuario || "").trim().toLowerCase() === identLimpo ||
+        String(t.email || "").trim().toLowerCase() === identLimpo;
+      return bateUsuario && t.codigoVerificacaoEmail && igualTextoSeguro(t.codigoVerificacaoEmail, codigoLimpo);
+    });
+  }
+
+  if (idx < 0) {
+    return { ok: false, erro: "Código ou link de verificação inválido." };
+  }
+
+  const tenant = lista[idx];
+  const expiraMs = tenant.verificacaoExpiraEm ? Date.parse(tenant.verificacaoExpiraEm) : 0;
+  if (expiraMs && Date.now() > expiraMs) {
+    return { ok: false, expirado: true, erro: "Este código expirou. Solicite um novo código de confirmação." };
+  }
+
+  const codigoUnico = tenant.codigoUnico || gerarCodigoUnicoUsuario(tenant.plano, lista);
+  lista[idx] = {
+    ...tenant,
+    codigoUnico,
+    emailVerificado: true,
+    codigoVerificacaoEmail: null,
+    tokenVerificacaoEmail: null,
+    verificacaoExpiraEm: null,
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarListaTenants(lista);
+  return { ok: true, tenant: sanitizarTenantPublico(lista[idx]) };
+}
+
+export function regenerarCodigoVerificacaoEmail(usuarioOuEmail) {
+  const ident = String(usuarioOuEmail || "").trim().toLowerCase();
+  if (!ident) return { ok: false, erro: "Informe seu usuário ou e-mail." };
+
+  const lista = lerListaTenants();
+  const idx = lista.findIndex(
+    (t) =>
+      String(t.usuario || "").trim().toLowerCase() === ident ||
+      String(t.email || "").trim().toLowerCase() === ident
+  );
+  if (idx < 0) return { ok: false, erro: "Conta não encontrada." };
+
+  const t = lista[idx];
+  if (t.emailVerificado !== false) {
+    return { ok: false, erro: "Este e-mail já foi confirmado. Pode fazer login normalmente." };
+  }
+  if (!validarFormatoEmail(t.email)) {
+    return { ok: false, erro: "Esta conta não possui um e-mail válido cadastrado." };
+  }
+
+  const codigo = gerarCodigoEmail6Digitos();
+  const token = gerarTokenEmail();
+  const verificacaoExpiraEm = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+  lista[idx] = {
+    ...t,
+    codigoUnico: t.codigoUnico || gerarCodigoUnicoUsuario(t.plano, lista),
+    codigoVerificacaoEmail: codigo,
+    tokenVerificacaoEmail: token,
+    verificacaoExpiraEm,
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarListaTenants(lista);
+  return {
+    ok: true,
+    tenant: sanitizarTenantPublico(lista[idx]),
+    verificacao: { codigo, token, expiraEm: verificacaoExpiraEm }
+  };
+}
+
+export function aprovarEmailManualAdmin(tenantId) {
+  const tid = normalizarTenantId(tenantId);
+  const lista = lerListaTenants();
+  const idx = lista.findIndex((t) => t.id === tid);
+  if (idx < 0) return { ok: false, erro: "Cliente não encontrado." };
+
+  lista[idx] = {
+    ...lista[idx],
+    codigoUnico: lista[idx].codigoUnico || gerarCodigoUnicoUsuario(lista[idx].plano, lista),
+    emailVerificado: true,
+    codigoVerificacaoEmail: null,
+    tokenVerificacaoEmail: null,
+    verificacaoExpiraEm: null,
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarListaTenants(lista);
+  return { ok: true, tenant: sanitizarTenantPublico(lista[idx]) };
+}
+
+export function marcarAvisoDemoVisto(tenantId) {
+  const tid = normalizarTenantId(tenantId);
+  const lista = lerListaTenants();
+  const idx = lista.findIndex((t) => t.id === tid);
+  if (idx < 0) return false;
+  lista[idx] = {
+    ...lista[idx],
+    avisoDemoVisto: true,
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarListaTenants(lista);
+  return true;
 }
 
 export async function criarClienteAdmin({
@@ -410,6 +594,9 @@ export async function criarClienteAdmin({
     nome: nomeLimpo,
     usuario: usuarioLimpo,
     email: emailLimpo,
+    codigoUnico: gerarCodigoUnicoUsuario(planoLimpo, lista),
+    emailVerificado: true,
+    avisoDemoVisto: planoLimpo !== "free",
     salt,
     hash,
     precisaTrocarSenha: !!precisaTrocarSenha,

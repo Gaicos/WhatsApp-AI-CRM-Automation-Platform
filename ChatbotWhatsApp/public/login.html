@@ -10,7 +10,7 @@
     <div class="caixa-login" style="max-width:440px;">
         <h2>🤖 WhatsApp Automation</h2>
 
-        <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <div id="abasLoginCadastro" style="display:flex; gap:8px; margin-bottom:16px;">
             <button type="button" id="tabModoLogin" class="botao-primario" style="flex:1;">Entrar</button>
             <button type="button" id="tabModoCadastro" class="botao-secundario" style="flex:1; opacity:0.75;">✨ Criar conta grátis</button>
         </div>
@@ -28,10 +28,9 @@
 
         <form id="formCadastroGratis" class="oculto">
             <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px; font-size:0.86em; color:#166534; margin-bottom:12px;">
-                <strong>🎁 Teste Gratuito por 7 dias:</strong><br>
-                • 1 agendamento automático<br>
-                • Até 2 grupos ou 3 contatos • 1 mídia<br>
-                • Triagem local de atendimento no seu WhatsApp
+                <strong>🎁 Conta DEMO Gratuita (7 dias):</strong><br>
+                • 1 agendamento • até 2 grupos ou 3 contatos • 1 mídia<br>
+                • Enviaremos um código/link para validar seu e-mail no 1º acesso
             </div>
 
             <label class="rotulo" for="regNome">Seu nome ou nome da loja</label>
@@ -40,8 +39,8 @@
             <label class="rotulo" for="regUsuario">Usuário para login</label>
             <input type="text" id="regUsuario" minlength="3" maxlength="30" placeholder="Ex: lojadojoao" required>
 
-            <label class="rotulo" for="regEmail">E-mail ou WhatsApp de contato</label>
-            <input type="text" id="regEmail" maxlength="120" placeholder="seu@email.com ou (11) 99999-9999">
+            <label class="rotulo" for="regEmail">E-mail válido (obrigatório para validação)</label>
+            <input type="email" id="regEmail" maxlength="120" placeholder="seu@email.com" required>
 
             <label class="rotulo" for="regSenha">Crie uma senha (mínimo 8 caracteres)</label>
             <input type="password" id="regSenha" minlength="8" autocomplete="new-password" required>
@@ -49,33 +48,108 @@
             <label class="rotulo" for="regConfirmarSenha">Confirme a senha</label>
             <input type="password" id="regConfirmarSenha" minlength="8" autocomplete="new-password" required>
 
-            <button type="submit" class="botao-primario largura-total">🚀 Criar Conta Grátis Agora</button>
+            <button type="submit" class="botao-primario largura-total">🚀 Criar Conta DEMO Agora</button>
             <p id="erroCadastro" class="erro-login"></p>
         </form>
+
+        <div id="blocoVerificarEmail" class="oculto">
+            <div style="background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:12px; font-size:0.9em; color:#92400e; margin-bottom:14px;">
+                <strong>📧 Confirme seu e-mail para fazer o 1º login</strong>
+                <p id="textoInfoVerificacao" style="margin:6px 0 0 0; line-height:1.45;"></p>
+                <p id="textoCodigoUnicoCadastro" style="margin:8px 0 0 0; font-weight:700;"></p>
+            </div>
+
+            <form id="formVerificarEmail">
+                <label class="rotulo" for="campoCodigoEmail">Código de 6 dígitos recebido no e-mail</label>
+                <input type="text" id="campoCodigoEmail" maxlength="6" placeholder="Ex: 123456" style="text-align:center; font-size:1.3em; letter-spacing:4px;" required>
+
+                <button type="submit" class="botao-primario largura-total">✅ Validar e Entrar na Conta DEMO</button>
+            </form>
+
+            <div style="display:flex; gap:8px; margin-top:10px;">
+                <button type="button" id="btnReenviarCodigoEmail" class="botao-secundario" style="flex:1;">🔄 Reenviar código</button>
+                <button type="button" id="btnVoltarLogin" class="botao-secundario" style="flex:1; opacity:0.8;">← Voltar</button>
+            </div>
+            <p id="msgVerificacaoEmail" class="erro-login"></p>
+        </div>
     </div>
 
     <script src="supabase-bridge.js"></script>
     <script>
         const formLogin = document.getElementById("formLogin");
         const formCadastro = document.getElementById("formCadastroGratis");
+        const blocoVerificar = document.getElementById("blocoVerificarEmail");
+        const abasTop = document.getElementById("abasLoginCadastro");
         const tabLogin = document.getElementById("tabModoLogin");
         const tabCadastro = document.getElementById("tabModoCadastro");
 
+        let usuarioPendenteVerificacao = "";
+
         function alternarModo(modo) {
             const ehCadastro = modo === "cadastro";
-            formLogin.classList.toggle("oculto", ehCadastro);
+            const ehVerificar = modo === "verificar";
+            formLogin.classList.toggle("oculto", ehCadastro || ehVerificar);
             formCadastro.classList.toggle("oculto", !ehCadastro);
+            blocoVerificar.classList.toggle("oculto", !ehVerificar);
+            abasTop.classList.toggle("oculto", ehVerificar);
             tabLogin.style.opacity = ehCadastro ? "0.75" : "1";
             tabCadastro.style.opacity = ehCadastro ? "1" : "0.75";
         }
 
+        function abrirTelaVerificacao({ usuario, email, codigoUnico, avisoEmail }) {
+            usuarioPendenteVerificacao = usuario || email || "";
+            const infoEl = document.getElementById("textoInfoVerificacao");
+            const codEl = document.getElementById("textoCodigoUnicoCadastro");
+            const msgEl = document.getElementById("msgVerificacaoEmail");
+
+            infoEl.textContent = avisoEmail
+                ? `${avisoEmail} (E-mail: ${email || "-"})`
+                : `Enviamos um código de 6 dígitos e um link de acesso para ${email || "seu e-mail"}. Você está criando uma conta DEMO gratuita por 7 dias.`;
+            codEl.textContent = codigoUnico ? `Seu código único de usuário: ${codigoUnico}` : "";
+            msgEl.textContent = "";
+            alternarModo("verificar");
+        }
+
         tabLogin.addEventListener("click", () => alternarModo("login"));
         tabCadastro.addEventListener("click", () => alternarModo("cadastro"));
+        document.getElementById("btnVoltarLogin").addEventListener("click", () => alternarModo("login"));
+
+        // Verifica automaticamente se veio por link clicável no e-mail (?verificar=TOKEN)
+        (async () => {
+            const params = new URLSearchParams(window.location.search);
+            const tokenEmail = params.get("verificar");
+            if (tokenEmail) {
+                const erroEl = document.getElementById("erroLogin");
+                erroEl.style.color = "#075E54";
+                erroEl.textContent = "Validando seu e-mail pelo link...";
+                try {
+                    const resp = await fetch("/api/verificar-email", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ token: tokenEmail })
+                    });
+                    const dados = await resp.json().catch(() => ({}));
+                    if (resp.ok && dados.ok) {
+                        window.location.href = "./conectar.html";
+                        return;
+                    }
+                    erroEl.style.color = "";
+                    erroEl.textContent = dados.erro || "Link inválido ou expirado.";
+                } catch {
+                    erroEl.style.color = "";
+                    erroEl.textContent = "Não foi possível validar o link.";
+                }
+            }
+            if (params.get("erro") === "link_invalido") {
+                document.getElementById("erroLogin").textContent = "Link de confirmação inválido ou expirado.";
+            }
+        })();
 
         formLogin.addEventListener("submit", async (e) => {
             e.preventDefault();
             const erro = document.getElementById("erroLogin");
             const botao = e.target.querySelector("button");
+            erro.style.color = "";
             erro.textContent = "";
             botao.disabled = true;
 
@@ -90,6 +164,10 @@
                 });
                 const dados = await resposta.json().catch(() => ({}));
 
+                if (resposta.status === 403 && dados.precisaVerificarEmail) {
+                    abrirTelaVerificacao({ usuario: dados.usuario, email: dados.email });
+                    return;
+                }
                 if (!resposta.ok) {
                     erro.textContent = dados.erro || "Não foi possível entrar.";
                     return;
@@ -132,11 +210,69 @@
                     erro.textContent = dados.erro || "Não foi possível criar sua conta gratuita.";
                     return;
                 }
-                window.location.href = "./conectar.html";
+                abrirTelaVerificacao({
+                    usuario: dados.usuario,
+                    email: dados.email,
+                    codigoUnico: dados.codigoUnico,
+                    avisoEmail: dados.avisoEmail
+                });
             } catch {
                 erro.textContent = "Sem conexão com o servidor. Tente novamente.";
             } finally {
                 botao.disabled = false;
+            }
+        });
+
+        document.getElementById("formVerificarEmail").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const msgEl = document.getElementById("msgVerificacaoEmail");
+            const botao = e.target.querySelector("button");
+            msgEl.style.color = "";
+            msgEl.textContent = "";
+            botao.disabled = true;
+
+            try {
+                const resposta = await fetch("/api/verificar-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        usuario: usuarioPendenteVerificacao,
+                        codigo: document.getElementById("campoCodigoEmail").value.trim()
+                    })
+                });
+                const dados = await resposta.json().catch(() => ({}));
+                if (!resposta.ok || !dados.ok) {
+                    msgEl.textContent = dados.erro || "Código inválido.";
+                    return;
+                }
+                window.location.href = "./conectar.html";
+            } catch {
+                msgEl.textContent = "Erro de conexão ao verificar código.";
+            } finally {
+                botao.disabled = false;
+            }
+        });
+
+        document.getElementById("btnReenviarCodigoEmail").addEventListener("click", async () => {
+            const msgEl = document.getElementById("msgVerificacaoEmail");
+            msgEl.style.color = "#075E54";
+            msgEl.textContent = "Reenviando código...";
+            try {
+                const resp = await fetch("/api/reenviar-codigo-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ usuario: usuarioPendenteVerificacao })
+                });
+                const dados = await resp.json().catch(() => ({}));
+                if (!resp.ok || !dados.ok) {
+                    msgEl.style.color = "";
+                    msgEl.textContent = dados.erro || "Não foi possível reenviar.";
+                    return;
+                }
+                msgEl.textContent = dados.avisoEmail || "✅ Novo código enviado para o seu e-mail!";
+            } catch {
+                msgEl.style.color = "";
+                msgEl.textContent = "Falha de comunicação ao reenviar.";
             }
         });
     </script>

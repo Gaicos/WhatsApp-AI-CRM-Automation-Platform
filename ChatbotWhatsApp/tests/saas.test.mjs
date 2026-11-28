@@ -27,7 +27,15 @@ assert.equal(loginAdmin.tenant.id, "admin");
 assert.equal(loginAdmin.tenant.papel, "superadmin");
 assert.equal(tenants.avaliarAcessoTenant(loginAdmin.tenant).liberado, true);
 
-// 2. Auto-cadastro gratuito (7 dias) + bloqueio de usuario duplicado
+// 2. Auto-cadastro gratuito (7 dias) exige e-mail válido + validação por código/link + código único
+const regSemEmail = await tenants.registrarContaGratuita({
+  nome: "Sem Email",
+  usuario: "sememail",
+  email: "invalido",
+  senha: "Senha-Cliente-2026"
+});
+assert.equal(regSemEmail.ok, false);
+
 const regFree = await tenants.registrarContaGratuita({
   nome: "Loja Teste Gratis",
   usuario: "testegratis",
@@ -37,13 +45,55 @@ const regFree = await tenants.registrarContaGratuita({
 assert.equal(regFree.ok, true);
 assert.equal(regFree.tenant.plano, "free");
 assert.equal(regFree.tenant.papel, "cliente");
+assert.ok(regFree.tenant.codigoUnico.startsWith("DEMO-"));
+assert.equal(regFree.tenant.emailVerificado, false);
+assert.equal(regFree.tenant.avisoDemoVisto, false);
+assert.match(regFree.verificacao.codigo, /^\d{6}$/);
 
 const regDup = await tenants.registrarContaGratuita({
   nome: "Outra",
   usuario: "TesteGratis",
+  email: "outra@loja.com",
   senha: "Senha-Cliente-2026"
 });
 assert.equal(regDup.ok, false);
+
+const regDupEmail = await tenants.registrarContaGratuita({
+  nome: "Outra 2",
+  usuario: "outrousuario",
+  email: "teste@loja.com",
+  senha: "Senha-Cliente-2026"
+});
+assert.equal(regDupEmail.ok, false);
+
+// Código errado não confirma; código certo confirma e permite confirmar aviso DEMO
+const verifErrado = tenants.verificarEmailPorCodigoOuToken({
+  usuarioOuEmail: "testegratis",
+  codigo: "000000"
+});
+assert.equal(verifErrado.ok, false);
+
+const verifCerto = tenants.verificarEmailPorCodigoOuToken({
+  usuarioOuEmail: "testegratis",
+  codigo: regFree.verificacao.codigo
+});
+assert.equal(verifCerto.ok, true);
+assert.equal(verifCerto.tenant.emailVerificado, true);
+assert.equal(tenants.marcarAvisoDemoVisto(regFree.tenant.id), true);
+assert.equal(tenants.sanitizarTenantPublico(tenants.obterTenantPorId(regFree.tenant.id)).avisoDemoVisto, true);
+
+// Fluxo de reenviar código e aprovar manualmente pelo Admin
+const regFree2 = await tenants.registrarContaGratuita({
+  nome: "Loja Dois",
+  usuario: "lojadois",
+  email: "dois@loja.com",
+  senha: "Senha-Cliente-2026"
+});
+assert.equal(regFree2.ok, true);
+assert.notEqual(regFree2.tenant.codigoUnico, regFree.tenant.codigoUnico);
+const reenvio = tenants.regenerarCodigoVerificacaoEmail("lojadois");
+assert.equal(reenvio.ok, true);
+assert.equal(tenants.aprovarEmailManualAdmin(regFree2.tenant.id).tenant.emailVerificado, true);
 
 const loginFree = await tenants.verificarCredenciaisTenant("testegratis", "Senha-Cliente-2026");
 assert.equal(loginFree.ok, true);

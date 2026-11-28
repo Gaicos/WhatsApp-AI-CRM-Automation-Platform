@@ -55,6 +55,7 @@
         ? `<span style="color:#64748b; font-size:0.85em;">Conta principal</span>`
         : `
           <div style="display:flex; flex-wrap:wrap; gap:4px;">
+            ${c.emailVerificado === false ? `<button type="button" class="botao-primario" data-adm-acao="verificarEmail" data-id="${escapeHtml(c.id)}">📧 Validar e-mail</button>` : ""}
             <button type="button" class="botao-primario" data-adm-acao="renovar" data-id="${escapeHtml(c.id)}" title="Adicionar +30 dias">+30d</button>
             <button type="button" class="botao-secundario" data-adm-acao="plano" data-id="${escapeHtml(c.id)}" data-plano="${c.plano === "pro" ? "free" : "pro"}">${c.plano === "pro" ? "Mudar p/ Grátis" : "Ativar Pro"}</button>
             <button type="button" class="botao-alerta" data-adm-acao="toggle" data-id="${escapeHtml(c.id)}" data-ativo="${c.ativo === false ? "1" : "0"}">${c.ativo === false ? "Reativar" : "Suspender"}</button>
@@ -63,11 +64,15 @@
           </div>
         `;
 
+      const tagEmailPendente = c.emailVerificado === false
+        ? `<br><small style="color:#d97706; font-weight:600;">📧 Aguardando confirmação de e-mail</small>`
+        : "";
+
       return `
         <tr>
           <td>
-            <strong>${escapeHtml(c.nome)}</strong><br>
-            <small style="color:#64748b;">@${escapeHtml(c.usuario)}${c.email ? " · " + escapeHtml(c.email) : ""}</small>
+            <strong>${escapeHtml(c.nome)}</strong> <small style="color:#0f766e;">[${escapeHtml(c.codigoUnico || c.id)}]</small><br>
+            <small style="color:#64748b;">@${escapeHtml(c.usuario)}${c.email ? " · " + escapeHtml(c.email) : ""}</small>${tagEmailPendente}
           </td>
           <td>${escapeHtml(planoLabel)}</td>
           <td>${statusBadge}</td>
@@ -137,7 +142,16 @@
       const acao = btn.dataset.admAcao;
       const id = btn.dataset.id;
 
-      if (acao === "renovar") {
+      if (acao === "verificarEmail") {
+        const resp = await fetch(`/api/admin/clientes/${encodeURIComponent(id)}/verificar-email`, { method: "POST" });
+        const dados = await resp.json().catch(() => ({}));
+        if (resp.ok && dados.ok) {
+          mostrarToast("E-mail do cliente validado manualmente! 📧✅");
+          await carregarPainelAdmin();
+        } else {
+          mostrarToast(dados.erro || "Erro ao validar e-mail.", "erro");
+        }
+      } else if (acao === "renovar") {
         const resp = await fetch(`/api/admin/clientes/${encodeURIComponent(id)}/renovar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

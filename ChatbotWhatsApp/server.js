@@ -13,8 +13,9 @@ import {
 import {
   conectarWhatsApp, ligarBot, desligarBot, sairDoWhatsapp, statusConexao, getQrAtual,
   getGruposRecebidos, gerarNovoQr, enviarMensagemGrupos, enviarMensagemDireta,
-  listarStatusSessoesWhatsapp
+  listarStatusSessoesWhatsapp, solicitarCodigoPareamento, getSock
 } from "./whatsapp/whatsappService.js";
+import { enviarEmailVerificacao } from "./services/emailService.js";
 import { iniciarScheduler } from "./scheduler/scheduler.js";
 import { reiniciarProcesso, statusProcesso } from "./services/processoService.js";
 import {
@@ -44,7 +45,9 @@ import {
   avaliarAcessoTenant, obterLimitesPlano, criarClienteAdmin, atualizarClienteAdmin,
   renovarClienteAdmin, resetarSenhaClienteAdmin, excluirClienteAdmin,
   validarAgendamentosNoPlano, validarTriagemNoPlano,
-  listarTenantsAtivosParaScheduler, listarTenantsElegiveisAutoConexao
+  listarTenantsAtivosParaScheduler, listarTenantsElegiveisAutoConexao,
+  verificarEmailPorCodigoOuToken, regenerarCodigoVerificacaoEmail,
+  aprovarEmailManualAdmin, marcarAvisoDemoVisto
 } from "./services/tenantService.js";
 
 process.on("unhandledRejection", (err) => {
@@ -137,6 +140,14 @@ function montarMensagemAgendamento(agendamento) {
 }
 
 // ----------------- AUTENTICAÇÃO E AUTO-CADASTRO GRÁTIS -----------------
+const reenviosEmailPorIp = new Map();
+
+function urlBaseRequisicao(req) {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.get("host");
+  return `${proto}://${host}`;
+}
+
 app.post("/api/login", async (req, res) => {
   const ip = req.ip || "ip";
   const bloqueio = verificarBloqueio(ip);
@@ -150,6 +161,17 @@ app.post("/api/login", async (req, res) => {
 
   limparFalhas(ip);
   const { tenant } = resultado;
+
+  if (tenant.emailVerificado === false) {
+    return res.status(403).json({
+      ok: false,
+      precisaVerificarEmail: true,
+      usuario: tenant.usuario,
+      email: tenant.email,
+      erro: "Confirme seu e-mail com o código ou link enviado antes do primeiro login."
+    });
+  }
+
   const token = criarSessao(tenant.usuario, resultado.precisaTrocarSenha, {
     tenantId: tenant.id,
     papel: tenant.papel
@@ -159,7 +181,8 @@ app.post("/api/login", async (req, res) => {
     ok: true,
     precisaTrocarSenha: resultado.precisaTrocarSenha,
     papel: tenant.papel,
-    plano: tenant.plano
+    plano: tenant.plano,
+    avisoDemo: tenant.plano === "free" && tenant.avisoDemoVisto !== true
   });
 });
 
@@ -185,12 +208,112 @@ app.post("/api/registrar-gratis", async (req, res) => {
   janela.push(agora);
   registrosPorIp.set(ip, janela);
 
-  const token = criarSessao(resultado.tenant.usuario, false, {
-    tenantId: resultado.tenant.id,
-    papel: resultado.tenant.papel
+  const { tenant, verificacao } = resultado;
+  const linkVerificacao = `${urlBaseRequisicao(req)}/login.html?verificar=${encodeURIComponent(verificacao.token)}`;
+  let envio = { enviado: false, motivo: "" };
+  try {
+    envio = await enviarEmailVerificacao({
+      para: tenant.email,
+      nome: tenant.nome,
+      codigo: verificacao.codigo,
+      linkVerificacao,
+      codigoUnico: tenant.codigoUnico
+    });
+  } catch (err) {
+    envio = { enviado: false, motivo: err.message };
+  }
+
+  res.status(201).json({
+    ok: true,
+    precisaVerificarEmail: true,
+    usuario: tenant.usuario,
+    email: tenant.email,
+    codigoUnico: tenant.codigoUnico,
+    emailEnviado: !!envio.enviado,
+    avisoEmail: envio.enviado
+      ? null
+      : "O envio automático de e-mail ainda não está ativado no servidor (configure BREVO_API_KEY) — peça ao administrador para validar seu e-mail no painel Admin."
   });
-  definirCookieSessao(req, res, token);
-  res.status(201).json({ ok: true, tenant: resultado.tenant });
+});
+
+app.post("/api/verificar-email", (req, res) => {
+  const resultado = verificarEmailPorCodigoOuToken({
+    usuarioOuEmail: req.body?.usuario,
+    codigo: req.body?.codigo,
+    token: req.body?.token
+  });
+  if (!resultado.ok) {
+    return res.status(400).json(resultado);
+  }
+
+  const { tenant } = resultado;
+  const tokenSessao = criarSessao(tenant.usuario, false, {
+    tenantId: tenant.id,
+    papel: tenant.papel
+  });
+  definirCookieSessao(req, res, tokenSessao);
+
+  return res.json({
+    ok: true,
+    tenant,
+    avisoDemo: tenant.plano === "free" && tenant.avisoDemoVisto !== true
+  });
+});
+
+app.get("/api/verificar-email", (req, res) => {
+  const tokenUrl = String(req.query?.token || "").trim();
+  const resultado = verificarEmailPorCodigoOuToken({ token: tokenUrl });
+  if (!resultado.ok) {
+    return res.redirect("./login.html?erro=link_invalido");
+  }
+  const { tenant } = resultado;
+  const tokenSessao = criarSessao(tenant.usuario, false, {
+    tenantId: tenant.id,
+    papel: tenant.papel
+  });
+  definirCookieSessao(req, res, tokenSessao);
+  return res.redirect("./conectar.html");
+});
+
+app.post("/api/reenviar-codigo-email", async (req, res) => {
+  const ip = req.ip || "ip";
+  const ultimo = reenviosEmailPorIp.get(ip) || 0;
+  if (Date.now() - ultimo < 60 * 1000) {
+    return res.status(429).json({ ok: false, erro: "Aguarde 1 minuto antes de reenviar o código." });
+  }
+
+  const resultado = regenerarCodigoVerificacaoEmail(req.body?.usuario);
+  if (!resultado.ok) {
+    return res.status(400).json(resultado);
+  }
+
+  reenviosEmailPorIp.set(ip, Date.now());
+  const { tenant, verificacao } = resultado;
+  const linkVerificacao = `${urlBaseRequisicao(req)}/login.html?verificar=${encodeURIComponent(verificacao.token)}`;
+
+  try {
+    const envio = await enviarEmailVerificacao({
+      para: tenant.email,
+      nome: tenant.nome,
+      codigo: verificacao.codigo,
+      linkVerificacao,
+      codigoUnico: tenant.codigoUnico
+    });
+    return res.json({
+      ok: true,
+      emailEnviado: !!envio.enviado,
+      avisoEmail: envio.enviado
+        ? null
+        : "Envio automático de e-mail não configurado no servidor; solicite liberação ao administrador."
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, erro: err.message || "Falha ao enviar e-mail." });
+  }
+});
+
+app.post("/api/conta/confirmar-aviso-demo", exigirLogin, (req, res) => {
+  marcarAvisoDemoVisto(req.tenant.id);
+  res.json({ ok: true });
 });
 
 app.post("/api/logout", exigirLogin, (req, res) => {
@@ -370,14 +493,29 @@ app.get("/api/bot/status", exigirLogin, async (req, res) => {
   });
 });
 
-app.get("/api/qr", exigirLogin, exigirAssinaturaAtiva, (_req, res) => {
+app.get("/api/qr", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
   const c = statusConexao();
+  const qr = getQrAtual();
+  if (!c.conectado && !c.desligadoManualmente && !getSock() && !qr) {
+    ligarBot(req.tenant.id).catch(err =>
+      console.error(`⚠️ Falha ao iniciar pareamento [${req.tenant.id}]:`, err?.message || err)
+    );
+  }
   res.json({
     conectado: !!c.conectado,
-    qr: getQrAtual(),
+    qr,
     sessaoInvalida: !!c.sessaoInvalida,
     erro: c.erroConexao || null
   });
+});
+
+app.post("/api/bot/codigo-pareamento", exigirLogin, exigirAssinaturaAtiva, async (req, res) => {
+  try {
+    const resultado = await solicitarCodigoPareamento(req.body?.telefone, req.tenant.id);
+    res.json(resultado);
+  } catch (err) {
+    res.status(400).json({ ok: false, erro: err?.message || "Não foi possível gerar o código de pareamento." });
+  }
 });
 
 app.get("/api/supabase", exigirLogin, exigirSuperAdmin, async (_req, res) => {
@@ -572,6 +710,12 @@ app.put("/api/admin/clientes/:id", exigirLogin, exigirSuperAdmin, (req, res) => 
 app.post("/api/admin/clientes/:id/renovar", exigirLogin, exigirSuperAdmin, (req, res) => {
   const dias = Number(req.body?.dias) || 30;
   const result = renovarClienteAdmin(req.params.id, dias);
+  if (!result.ok) return res.status(400).json(result);
+  res.json(result);
+});
+
+app.post("/api/admin/clientes/:id/verificar-email", exigirLogin, exigirSuperAdmin, (req, res) => {
+  const result = aprovarEmailManualAdmin(req.params.id);
   if (!result.ok) return res.status(400).json(result);
   res.json(result);
 });

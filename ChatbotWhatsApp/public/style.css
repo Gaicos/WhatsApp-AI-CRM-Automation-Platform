@@ -343,8 +343,11 @@ input[type="checkbox"], input[type="radio"] {
 .erro-login { color: var(--vermelho); font-size: 0.9em; min-height: 1.2em; margin: 10px 0 0; }
 .status-login { font-size: 0.9em; color: var(--texto-suave); }
 .qr-img {
-    width: 260px;
-    height: 260px;
+    width: 280px;
+    height: 280px;
+    padding: 10px;
+    background: #ffffff;
+    image-rendering: pixelated;
     margin: 18px auto;
     display: block;
     border-radius: 8px;

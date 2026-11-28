@@ -1115,6 +1115,11 @@ document.getElementById("btnSairBloqueado")?.addEventListener("click", async () 
     window.location.href = "./login.html";
 });
 
+document.getElementById("btnConfirmarAvisoDemo")?.addEventListener("click", async () => {
+    await fetch("/api/conta/confirmar-aviso-demo", { method: "POST" }).catch(() => {});
+    document.getElementById("modalAvisoDemo")?.classList.add("oculto");
+});
+
 // Início: confere sessão, troca de senha obrigatória, assinatura e conexão do WhatsApp -----
 
 async function iniciarPagina() {
@@ -1129,8 +1134,9 @@ async function iniciarPagina() {
 
     const badge = document.getElementById("badgePlanoUsuario");
     if (badge) {
-        const planoTxt = ehSuper ? "👑 Admin" : (tenant.plano === "pro" ? "⭐ Plano Pro" : `🎁 Grátis (${acesso.diasRestantes ?? 0}d)`);
-        badge.textContent = `${tenant.nome || tenant.usuario || ""} · ${planoTxt}`;
+        const planoTxt = ehSuper ? "👑 Admin" : (tenant.plano === "pro" ? "⭐ Plano Pro" : `🎁 DEMO (${acesso.diasRestantes ?? 0}d)`);
+        const codTxt = tenant.codigoUnico ? ` · ${tenant.codigoUnico}` : "";
+        badge.textContent = `${tenant.nome || tenant.usuario || ""} · ${planoTxt}${codTxt}`;
     }
 
     document.getElementById("btnAbaAdmin")?.classList.toggle("oculto", !ehSuper);
@@ -1150,8 +1156,14 @@ async function iniciarPagina() {
     if (tenant.plano === "free") {
         const banner = document.getElementById("bannerPlanoGratis");
         if (banner) {
-            banner.innerHTML = `🎁 <strong>Você está no Teste Gratuito</strong> (restam <strong>${acesso.diasRestantes ?? 7} dia(s)</strong>) — Limite: <strong>1 agendamento</strong>, até <strong>2 grupos / 3 contatos</strong> e <strong>1 mídia</strong>. Fale com o administrador para liberar o <strong>Plano Pro ilimitado</strong>!`;
+            banner.innerHTML = `🎁 <strong>Conta DEMO (${tenant.codigoUnico || ""})</strong> — restam <strong>${acesso.diasRestantes ?? 7} dia(s)</strong> | Limite: <strong>1 agendamento</strong>, até <strong>2 grupos / 3 contatos</strong> e <strong>1 mídia</strong>. Fale com o administrador para ativar o <strong>Plano Pro</strong>!`;
             banner.classList.remove("oculto");
+        }
+        if (tenant.avisoDemoVisto === false) {
+            const modalDemo = document.getElementById("modalAvisoDemo");
+            const codPainel = document.getElementById("demoCodigoPainel");
+            if (codPainel) codPainel.textContent = `Código único da sua conta: ${tenant.codigoUnico || "-"}`;
+            modalDemo?.classList.remove("oculto");
         }
     }
 
