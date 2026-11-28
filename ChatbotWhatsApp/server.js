@@ -12,7 +12,7 @@ import {
 } from "./services/authService.js";
 import {
   conectarWhatsApp, ligarBot, desligarBot, sairDoWhatsapp, statusConexao, getQrAtual,
-  getGruposRecebidos, gerarNovoQr, enviarMensagemGrupos, enviarMensagemDireta,
+  getGruposRecebidos, buscarGruposWhatsapp, gerarNovoQr, enviarMensagemGrupos, enviarMensagemDireta,
   listarStatusSessoesWhatsapp, solicitarCodigoPareamento, getSock
 } from "./whatsapp/whatsappService.js";
 import { enviarEmailVerificacao } from "./services/emailService.js";
@@ -345,9 +345,16 @@ app.post("/api/trocar-senha", exigirLogin, async (req, res) => {
 // ----------------- GRUPOS, CONTATOS, LISTAS E AGENDAMENTOS -----------------
 app.get("/api/grupos", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(lerGrupos()));
 app.post("/api/grupos", exigirLogin, exigirAssinaturaAtiva, (req, res) => { salvarGrupos(req.body); res.json({ ok: true }); });
-app.get("/api/grupos-whatsapp", exigirLogin, exigirAssinaturaAtiva, async (_req, res) => {
-  const grupos = getGruposRecebidos();
-  res.json(Object.entries(grupos).map(([id, grupo]) => ({ id, nome: grupo.subject || id })));
+app.get("/api/grupos-whatsapp", exigirLogin, exigirAssinaturaAtiva, async (req, res) => {
+  try {
+    const grupos = await buscarGruposWhatsapp(req.tenant.id);
+    const lista = Object.entries(grupos)
+      .map(([id, grupo]) => ({ id, nome: grupo.subject || id }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ erro: err?.message || "Não foi possível carregar os grupos do WhatsApp." });
+  }
 });
 
 app.get("/api/contatos", exigirLogin, exigirAssinaturaAtiva, (_req, res) => res.json(lerContatos()));
@@ -400,7 +407,7 @@ app.post("/api/testar/:id", exigirLogin, exigirAssinaturaAtiva, async (req, res)
     const resultadoEnvio = await enviarMensagemGrupos(destinos, mensagem, {
       horario: agendamento.horario,
       origem: "teste manual"
-    });
+    }, req.tenant.id);
     if (resultadoEnvio?.enviados === 0) {
       return res.status(400).json({ erro: "Nenhuma mensagem foi enviada. Verifique se o WhatsApp esta conectado." });
     }
@@ -486,17 +493,17 @@ app.get("/api/bot/status", exigirLogin, async (req, res) => {
   const isSuper = req.tenant?.papel === "superadmin";
   const supabaseStatus = isSuper ? await verificarConexaoSupabase() : { configurado: true, conectado: true };
   res.json({
-    conexaoWhatsapp: statusConexao(),
+    conexaoWhatsapp: statusConexao(req.tenant.id),
     processo: statusProcesso(),
-    qr: getQrAtual(),
+    qr: getQrAtual(req.tenant.id),
     supabase: supabaseStatus
   });
 });
 
 app.get("/api/qr", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
-  const c = statusConexao();
-  const qr = getQrAtual();
-  if (!c.conectado && !c.desligadoManualmente && !getSock() && !qr) {
+  const c = statusConexao(req.tenant.id);
+  const qr = getQrAtual(req.tenant.id);
+  if (!c.conectado && !c.desligadoManualmente && !getSock(req.tenant.id) && !qr) {
     ligarBot(req.tenant.id).catch(err =>
       console.error(`⚠️ Falha ao iniciar pareamento [${req.tenant.id}]:`, err?.message || err)
     );
@@ -535,12 +542,12 @@ app.post("/api/supabase/sincronizar", exigirLogin, exigirSuperAdmin, async (_req
   res.json({ ...sync, status });
 });
 
-app.post("/api/bot/ligar", exigirLogin, exigirAssinaturaAtiva, async (_req, res) => { await ligarBot(); res.json({ ok: true }); });
-app.post("/api/bot/desligar", exigirLogin, exigirAssinaturaAtiva, (_req, res) => { desligarBot(); res.json({ ok: true }); });
+app.post("/api/bot/ligar", exigirLogin, exigirAssinaturaAtiva, async (req, res) => { await ligarBot(req.tenant.id); res.json({ ok: true }); });
+app.post("/api/bot/desligar", exigirLogin, exigirAssinaturaAtiva, (req, res) => { desligarBot(req.tenant.id); res.json({ ok: true }); });
 app.post("/api/bot/reiniciar", exigirLogin, exigirSuperAdmin, (_req, res) => { reiniciarProcesso(); res.json({ ok: true }); });
-app.post("/api/bot/qr", exigirLogin, exigirAssinaturaAtiva, async (_req, res) => { await gerarNovoQr(); res.json({ ok: true }); });
-app.post("/api/bot/novo-qr", exigirLogin, exigirAssinaturaAtiva, async (_req, res) => { await gerarNovoQr(); res.json({ ok: true }); });
-app.post("/api/bot/sair", exigirLogin, exigirAssinaturaAtiva, async (_req, res) => { await sairDoWhatsapp(); res.json({ ok: true }); });
+app.post("/api/bot/qr", exigirLogin, exigirAssinaturaAtiva, async (req, res) => { await gerarNovoQr(req.tenant.id); res.json({ ok: true }); });
+app.post("/api/bot/novo-qr", exigirLogin, exigirAssinaturaAtiva, async (req, res) => { await gerarNovoQr(req.tenant.id); res.json({ ok: true }); });
+app.post("/api/bot/sair", exigirLogin, exigirAssinaturaAtiva, async (req, res) => { await sairDoWhatsapp(req.tenant.id); res.json({ ok: true }); });
 
 // ----------------- WEBHOOK DO SITE POR TENANT -----------------
 function resolverTenantWebhook(paramTenant) {
@@ -602,7 +609,7 @@ app.post(["/api/webhook/site", "/api/webhook/site/:tenantId"], async (req, res) 
 });
 
 // ----------------- CONFIGURAÇÃO WEBHOOKS NO PAINEL ADMIN DO TENANT -----------------
-app.get("/api/webhooks/config", exigirLogin, exigirAssinaturaAtiva, (_req, res) => {
+app.get("/api/webhooks/config", exigirLogin, exigirAssinaturaAtiva, (req, res) => {
   const cfg = lerConfigWebhook();
   const limites = obterLimitesPlano(req.tenant);
   res.json({ ...cfg, permitidoNoPlano: !!limites.permiteWebhook });

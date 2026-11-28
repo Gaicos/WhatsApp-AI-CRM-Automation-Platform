@@ -182,11 +182,31 @@ async function carregarGrupoControleAtual() {
 }
 
 document.getElementById("btnCarregarGruposControle").addEventListener("click", async () => {
+    const btn = document.getElementById("btnCarregarGruposControle");
     const select = document.getElementById("selectGrupoControle");
+    btn.disabled = true;
     select.innerHTML = "<option>Carregando...</option>";
 
-    gruposControleCache = await fetch("/api/grupos-whatsapp").then(r => r.json());
-    select.innerHTML = gruposControleCache.map(g => `<option value="${g.id}">${g.nome}</option>`).join("");
+    try {
+        const resp = await fetch("/api/grupos-whatsapp");
+        const dados = await resp.json().catch(() => []);
+        if (!resp.ok || !Array.isArray(dados)) {
+            select.innerHTML = `<option value="">Erro ao carregar grupos</option>`;
+            mostrarToast(dados?.erro || "Erro ao carregar grupos do WhatsApp.", "erro");
+            return;
+        }
+        gruposControleCache = dados;
+        if (gruposControleCache.length === 0) {
+            select.innerHTML = `<option value="">Nenhum grupo encontrado ainda</option>`;
+        } else {
+            select.innerHTML = gruposControleCache.map(g => `<option value="${g.id}">${g.nome}</option>`).join("");
+        }
+    } catch {
+        select.innerHTML = `<option value="">Falha de conexão</option>`;
+        mostrarToast("Não foi possível buscar os grupos do WhatsApp.", "erro");
+    } finally {
+        btn.disabled = false;
+    }
 });
 
 document.getElementById("btnSalvarGrupoControle").addEventListener("click", async () => {
@@ -271,13 +291,30 @@ function removerGrupo(index) {
 }
 
 document.getElementById("btnBuscarGruposWhatsapp").addEventListener("click", async () => {
+    const btn = document.getElementById("btnBuscarGruposWhatsapp");
     const filtroNovos = document.getElementById("filtroGruposNovos");
-    document.getElementById("listaGruposWhatsapp").innerHTML = "Buscando...";
+    const listaDiv = document.getElementById("listaGruposWhatsapp");
+    btn.disabled = true;
+    listaDiv.innerHTML = "Buscando grupos no WhatsApp...";
 
-    gruposWhatsappCache = await fetch("/api/grupos-whatsapp").then(r => r.json());
-    filtroNovos.style.display = "block";
-    filtroNovos.value = "";
-    renderizarGruposNovos();
+    try {
+        const resp = await fetch("/api/grupos-whatsapp");
+        const dados = await resp.json().catch(() => []);
+        if (!resp.ok || !Array.isArray(dados)) {
+            listaDiv.innerHTML = `<p class="texto-erro">${dados?.erro || "Não foi possível carregar os grupos do WhatsApp."}</p>`;
+            mostrarToast(dados?.erro || "Erro ao buscar grupos.", "erro");
+            return;
+        }
+        gruposWhatsappCache = dados;
+        filtroNovos.style.display = "block";
+        filtroNovos.value = "";
+        renderizarGruposNovos();
+    } catch {
+        listaDiv.innerHTML = `<p class="texto-erro">Sem conexão ao buscar os grupos. Tente novamente.</p>`;
+        mostrarToast("Erro de conexão ao buscar grupos.", "erro");
+    } finally {
+        btn.disabled = false;
+    }
 });
 
 document.getElementById("filtroGruposNovos").addEventListener("input", renderizarGruposNovos);

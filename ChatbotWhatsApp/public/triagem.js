@@ -66,7 +66,7 @@ function atualizarVisibilidadeProvedor() {
 }
 
 function formatarDataHora(iso) {
-  if (!iso) return "Base padrão da Gaicos Store carregada.";
+  if (!iso) return "Nenhuma sincronização de site realizada ainda.";
   try {
     return "Última leitura do site: " + new Date(iso).toLocaleString("pt-BR");
   } catch {
@@ -82,7 +82,7 @@ async function carregarTriagem() {
   $("triagemBoasVindas").value = fluxoTriagem.boasVindas || "";
 
   $("iaAtiva").checked = ia.ativa !== false;
-  $("iaUrlSite").value = ia.urlSite || "https://www.gaicos-store.com.br/";
+  $("iaUrlSite").value = ia.urlSite || "";
   $("iaProvedor").value = ia.provedor || "local";
   $("iaModelo").value = ia.modelo || MODELOS_PADRAO[ia.provedor] || "";
   $("iaApiKey").value = ia.apiKey || "";

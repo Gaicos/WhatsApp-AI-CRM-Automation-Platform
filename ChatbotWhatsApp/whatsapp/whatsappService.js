@@ -41,12 +41,27 @@ function obterEstado(tenantId = obterTenantAtual()) {
             tentativasFalhas: 0,
             geracaoAtual: 0,
             gruposRecebidos: new Map(),
+            buscandoGruposPromise: null,
             credenciaisAtuais: null,
             erroConexao: null
         };
         sessoesWhatsapp.set(tid, st);
     }
     return st;
+}
+
+function mesclarGruposNoEstado(st, origem) {
+    if (!origem) return;
+    const itens = Array.isArray(origem) ? origem : Object.values(origem);
+    for (const g of itens) {
+        if (g?.id) {
+            st.gruposRecebidos.set(g.id, {
+                subject: g.subject || st.gruposRecebidos.get(g.id)?.subject || g.id,
+                announce: !!g.announce,
+                isCommunity: !!g.isCommunity
+            });
+        }
+    }
 }
 
 function deveUsarAuthSupabase(pastaLocal) {
@@ -166,9 +181,7 @@ export async function conectarWhatsApp(tenantId = obterTenantAtual()) {
 
         // Grupos chegam aos poucos durante a sincronização; guarda os que forem recebidos.
         const registrarGrupos = (lista) => {
-            for (const g of lista || []) {
-                if (g?.id) st.gruposRecebidos.set(g.id, { subject: g.subject, announce: !!g.announce, isCommunity: !!g.isCommunity });
-            }
+            mesclarGruposNoEstado(st, lista);
         };
         sock.ev.on("groups.upsert", registrarGrupos);
         sock.ev.on("groups.update", registrarGrupos);
@@ -201,6 +214,11 @@ export async function conectarWhatsApp(tenantId = obterTenantAtual()) {
                     salvarCredsWhatsappNoSupabase(pastaLocal, prefixo);
                 }
                 console.log(`✅ [${tid}] WhatsApp conectado e pronto para enviar mensagens.`);
+                setTimeout(() => {
+                    if (st.whatsappConectado) {
+                        buscarGruposWhatsapp(tid).catch(() => {});
+                    }
+                }, 1500);
             }
 
             if (connection === "close") {
@@ -395,6 +413,33 @@ export function getGruposRecebidos(tenantId = obterTenantAtual()) {
     return Object.fromEntries(obterEstado(tenantId).gruposRecebidos);
 }
 
+export async function buscarGruposWhatsapp(tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
+    const sock = st.sockAtual;
+
+    if (sock && st.whatsappConectado && typeof sock.groupFetchAllParticipating === "function") {
+        if (!st.buscandoGruposPromise) {
+            st.buscandoGruposPromise = (async () => {
+                try {
+                    const mapa = await Promise.race([
+                        sock.groupFetchAllParticipating(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Tempo esgotado ao buscar grupos.")), 20000))
+                    ]);
+                    mesclarGruposNoEstado(st, mapa);
+                } catch (err) {
+                    console.log(`⚠️ [${tid}] Erro ao buscar grupos participantes:`, err?.message || err);
+                } finally {
+                    st.buscandoGruposPromise = null;
+                }
+            })();
+        }
+        await st.buscandoGruposPromise;
+    }
+
+    return Object.fromEntries(st.gruposRecebidos);
+}
+
 export async function gerarNovoQr(tenantId = obterTenantAtual()) {
     const tid = normalizarTenantId(tenantId);
     const st = obterEstado(tid);
@@ -425,6 +470,7 @@ export async function sairDoWhatsapp(tenantId = obterTenantAtual()) {
     st.sockAtual = null;
     st.whatsappConectado = false;
     st.qrAtual = null;
+    st.gruposRecebidos.clear();
     fs.rmSync(pastaAuthLocalTenant(tid), { recursive: true, force: true });
     await limparAuthWhatsappNoSupabase(prefixoAuthWhatsappTenant(tid));
 }
