@@ -525,6 +525,51 @@ tbody tr:last-child td { border-bottom: none; }
     transform: translateY(-1px);
 }
 
+.paginacao-contatos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 10px 0;
+    padding: 10px 12px;
+    background: var(--elevado);
+    border: 1px solid var(--borda);
+    border-radius: 10px;
+}
+.paginacao-info {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--texto-suave);
+}
+.paginacao-controles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+.paginacao-controles button {
+    padding: 6px 10px;
+    font-size: 0.82rem;
+}
+.paginacao-controles input[type="number"] {
+    width: 68px;
+    margin: 0;
+    padding: 6px 8px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 0.84rem;
+}
+.paginacao-controles select {
+    width: auto;
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 0.82rem;
+}
+.grade-tags-contatos {
+    margin: 8px 0;
+}
+
 .linha-acoes {
     display: flex;
     align-items: center;

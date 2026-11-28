@@ -15,6 +15,8 @@ let envios = {};
 let midiasFormularioAtual = [];
 let gruposWhatsappCache = [];
 let contatosWhatsappCache = [];
+let paginaContatosWhatsapp = 1;
+let itensPorPaginaContatos = 60;
 let previewAtualId = null;
 let intervaloStatus = null;
 let gruposControleCache = [];
@@ -486,6 +488,7 @@ async function carregarContatosDoWhatsapp(forcar = false) {
             return;
         }
         contatosWhatsappCache = dados;
+        paginaContatosWhatsapp = 1;
         if (filtroNovos) {
             filtroNovos.style.display = "block";
             if (!forcar) filtroNovos.value = "";
@@ -503,7 +506,95 @@ async function carregarContatosDoWhatsapp(forcar = false) {
 
 document.getElementById("btnBuscarContatosWhatsapp")?.addEventListener("click", () => carregarContatosDoWhatsapp(false));
 document.getElementById("btnRessincronizarContatosWhatsapp")?.addEventListener("click", () => carregarContatosDoWhatsapp(true));
-document.getElementById("filtroContatosNovos")?.addEventListener("input", renderizarContatosNovos);
+document.getElementById("filtroContatosNovos")?.addEventListener("input", () => {
+    paginaContatosWhatsapp = 1;
+    renderizarContatosNovos();
+});
+
+function irParaPaginaContatos(novaPagina, rolarParaLista = false) {
+    paginaContatosWhatsapp = novaPagina;
+    renderizarContatosNovos();
+    if (rolarParaLista) {
+        document.getElementById("listaContatosWhatsapp")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+}
+
+function criarBarraPaginacaoContatos({ total, inicio, fim, paginaAtual, totalPaginas, rolarAoNavegar = false }) {
+    const barra = document.createElement("div");
+    barra.className = "paginacao-contatos";
+
+    const info = document.createElement("span");
+    info.className = "paginacao-info";
+    info.textContent = `Mostrando ${inicio}–${fim} de ${total.toLocaleString("pt-BR")} contatos`;
+    barra.appendChild(info);
+
+    const controles = document.createElement("div");
+    controles.className = "paginacao-controles";
+
+    const btnPrimeira = document.createElement("button");
+    btnPrimeira.type = "button";
+    btnPrimeira.textContent = "«";
+    btnPrimeira.title = "Primeira página";
+    btnPrimeira.disabled = paginaAtual <= 1;
+    btnPrimeira.onclick = () => irParaPaginaContatos(1, rolarAoNavegar);
+
+    const btnAnterior = document.createElement("button");
+    btnAnterior.type = "button";
+    btnAnterior.textContent = "‹ Anterior";
+    btnAnterior.disabled = paginaAtual <= 1;
+    btnAnterior.onclick = () => irParaPaginaContatos(paginaAtual - 1, rolarAoNavegar);
+
+    const rotuloPag = document.createElement("span");
+    rotuloPag.className = "paginacao-info";
+    rotuloPag.textContent = "Pág.";
+
+    const inputPag = document.createElement("input");
+    inputPag.type = "number";
+    inputPag.min = "1";
+    inputPag.max = String(totalPaginas);
+    inputPag.value = String(paginaAtual);
+    inputPag.title = "Digite o número da página e pressione Enter";
+    inputPag.addEventListener("change", () => {
+        const alvo = Math.max(1, Math.min(totalPaginas, parseInt(inputPag.value, 10) || 1));
+        irParaPaginaContatos(alvo, rolarAoNavegar);
+    });
+
+    const rotuloTotal = document.createElement("span");
+    rotuloTotal.className = "paginacao-info";
+    rotuloTotal.textContent = `de ${totalPaginas}`;
+
+    const btnProxima = document.createElement("button");
+    btnProxima.type = "button";
+    btnProxima.textContent = "Próxima ›";
+    btnProxima.disabled = paginaAtual >= totalPaginas;
+    btnProxima.onclick = () => irParaPaginaContatos(paginaAtual + 1, rolarAoNavegar);
+
+    const btnUltima = document.createElement("button");
+    btnUltima.type = "button";
+    btnUltima.textContent = "»";
+    btnUltima.title = "Última página";
+    btnUltima.disabled = paginaAtual >= totalPaginas;
+    btnUltima.onclick = () => irParaPaginaContatos(totalPaginas, rolarAoNavegar);
+
+    const selectTam = document.createElement("select");
+    selectTam.title = "Contatos por página";
+    [40, 60, 100, 200].forEach(qtd => {
+        const opt = document.createElement("option");
+        opt.value = String(qtd);
+        opt.textContent = `${qtd}/pág`;
+        if (qtd === itensPorPaginaContatos) opt.selected = true;
+        selectTam.appendChild(opt);
+    });
+    selectTam.addEventListener("change", () => {
+        itensPorPaginaContatos = Number(selectTam.value) || 60;
+        paginaContatosWhatsapp = 1;
+        renderizarContatosNovos();
+    });
+
+    controles.append(btnPrimeira, btnAnterior, rotuloPag, inputPag, rotuloTotal, btnProxima, btnUltima, selectTam);
+    barra.appendChild(controles);
+    return barra;
+}
 
 function renderizarContatosNovos() {
     const div = document.getElementById("listaContatosWhatsapp");
@@ -527,25 +618,48 @@ function renderizarContatosNovos() {
         return;
     }
 
-    div.innerHTML = "";
-    const limite = 80;
-    const exibidos = novos.slice(0, limite);
-    if (novos.length > limite) {
-        const aviso = document.createElement("p");
-        aviso.className = "meta-suave";
-        aviso.style.margin = "4px 0 8px 0";
-        aviso.textContent = `Exibindo ${limite} de ${novos.length} contatos encontrados — use o filtro acima para buscar por nome ou número.`;
-        div.appendChild(aviso);
-    }
+    const total = novos.length;
+    const totalPaginas = Math.max(1, Math.ceil(total / itensPorPaginaContatos));
+    if (paginaContatosWhatsapp > totalPaginas) paginaContatosWhatsapp = totalPaginas;
+    if (paginaContatosWhatsapp < 1) paginaContatosWhatsapp = 1;
 
+    const offset = (paginaContatosWhatsapp - 1) * itensPorPaginaContatos;
+    const exibidos = novos.slice(offset, offset + itensPorPaginaContatos);
+    const inicio = offset + 1;
+    const fim = offset + exibidos.length;
+
+    div.innerHTML = "";
+    div.appendChild(criarBarraPaginacaoContatos({
+        total,
+        inicio,
+        fim,
+        paginaAtual: paginaContatosWhatsapp,
+        totalPaginas,
+        rolarAoNavegar: false
+    }));
+
+    const grade = document.createElement("div");
+    grade.className = "grade-tags-contatos";
     exibidos.forEach(c => {
         const span = document.createElement("span");
         span.className = "tag-grupo";
         span.textContent = `+ ${c.nome} (${c.telefone})`;
         span.title = "Clique para adicionar à sua lista de contatos";
         span.onclick = () => adicionarContatoDoWhatsapp(c);
-        div.appendChild(span);
+        grade.appendChild(span);
     });
+    div.appendChild(grade);
+
+    if (totalPaginas > 1) {
+        div.appendChild(criarBarraPaginacaoContatos({
+            total,
+            inicio,
+            fim,
+            paginaAtual: paginaContatosWhatsapp,
+            totalPaginas,
+            rolarAoNavegar: true
+        }));
+    }
 }
 
 async function adicionarContatoDoWhatsapp(contato) {
