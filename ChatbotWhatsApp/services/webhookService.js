@@ -2,9 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import { lerConfig } from "./configService.js";
 import { salvarChaveNoSupabase } from "./supabaseService.js";
+import { caminhoArquivoTenant, chaveSupabaseTenant, obterTenantAtual, TENANT_PADRAO } from "./tenantContext.js";
 
-const CAMINHO_CONFIG = "./data/webhooks.json";
-const CAMINHO_EVENTOS = "./data/webhooksEventos.json";
 const MAX_EVENTOS = 100;
 
 export const EVENTOS_PADRAO = {
@@ -144,24 +143,24 @@ function clonarEventosPadrao(eventosRecebidos = {}) {
 }
 
 function escreverJsonAtomico(caminho, dados) {
-  fs.mkdirSync("./data", { recursive: true });
   const tmp = `${caminho}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(dados, null, 2), "utf-8");
   fs.renameSync(tmp, caminho);
 }
 
 export function lerConfigWebhook() {
+  const caminhoConfig = caminhoArquivoTenant("webhooks.json");
   let lido = {};
-  let existeArquivo = fs.existsSync(CAMINHO_CONFIG);
+  let existeArquivo = fs.existsSync(caminhoConfig);
   if (existeArquivo) {
     try {
-      lido = JSON.parse(fs.readFileSync(CAMINHO_CONFIG, "utf-8")) || {};
+      lido = JSON.parse(fs.readFileSync(caminhoConfig, "utf-8")) || {};
     } catch {
       lido = {};
     }
   }
 
-  const segredoEnv = (process.env.WEBHOOK_SECRET || "").trim();
+  const segredoEnv = obterTenantAtual() === TENANT_PADRAO ? (process.env.WEBHOOK_SECRET || "").trim() : "";
   const segredoArquivo = typeof lido.segredo === "string" ? lido.segredo.trim() : "";
   const segredo = segredoEnv || segredoArquivo || gerarNovoSegredo();
 
@@ -174,8 +173,8 @@ export function lerConfigWebhook() {
 
   if (!existeArquivo || (!segredoArquivo && !segredoEnv)) {
     try {
-      escreverJsonAtomico(CAMINHO_CONFIG, cfg);
-      salvarChaveNoSupabase("webhooksConfig", cfg);
+      escreverJsonAtomico(caminhoConfig, cfg);
+      salvarChaveNoSupabase(chaveSupabaseTenant("webhooksConfig"), cfg);
     } catch {}
   }
 
@@ -190,8 +189,8 @@ export function salvarConfigWebhook(novaConfig = {}) {
     eventos: clonarEventosPadrao(novaConfig.eventos || atual.eventos),
     atualizadoEm: new Date().toISOString()
   };
-  escreverJsonAtomico(CAMINHO_CONFIG, cfg);
-  salvarChaveNoSupabase("webhooksConfig", cfg);
+  escreverJsonAtomico(caminhoArquivoTenant("webhooks.json"), cfg);
+  salvarChaveNoSupabase(chaveSupabaseTenant("webhooksConfig"), cfg);
   return cfg;
 }
 
@@ -202,8 +201,8 @@ export function regenerarSegredoWebhook() {
     segredo: gerarNovoSegredo(),
     atualizadoEm: new Date().toISOString()
   };
-  escreverJsonAtomico(CAMINHO_CONFIG, cfg);
-  salvarChaveNoSupabase("webhooksConfig", cfg);
+  escreverJsonAtomico(caminhoArquivoTenant("webhooks.json"), cfg);
+  salvarChaveNoSupabase(chaveSupabaseTenant("webhooksConfig"), cfg);
   return cfg;
 }
 
@@ -380,9 +379,10 @@ export function renderizarTemplate(template, dados = {}) {
 }
 
 export function lerEventosWebhook() {
-  if (!fs.existsSync(CAMINHO_EVENTOS)) return [];
+  const caminhoEventos = caminhoArquivoTenant("webhooksEventos.json");
+  if (!fs.existsSync(caminhoEventos)) return [];
   try {
-    const lido = JSON.parse(fs.readFileSync(CAMINHO_EVENTOS, "utf-8"));
+    const lido = JSON.parse(fs.readFileSync(caminhoEventos, "utf-8"));
     return Array.isArray(lido) ? lido : [];
   } catch {
     return [];
@@ -399,16 +399,16 @@ export function registrarEventoWebhook(entrada) {
   lista.unshift(item);
   if (lista.length > MAX_EVENTOS) lista.length = MAX_EVENTOS;
   try {
-    escreverJsonAtomico(CAMINHO_EVENTOS, lista);
-    salvarChaveNoSupabase("webhooksEventos", lista);
+    escreverJsonAtomico(caminhoArquivoTenant("webhooksEventos.json"), lista);
+    salvarChaveNoSupabase(chaveSupabaseTenant("webhooksEventos"), lista);
   } catch {}
   return item;
 }
 
 export function limparEventosWebhook() {
   try {
-    escreverJsonAtomico(CAMINHO_EVENTOS, []);
-    salvarChaveNoSupabase("webhooksEventos", []);
+    escreverJsonAtomico(caminhoArquivoTenant("webhooksEventos.json"), []);
+    salvarChaveNoSupabase(chaveSupabaseTenant("webhooksEventos"), []);
   } catch {}
 }
 

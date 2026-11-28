@@ -8,16 +8,28 @@
 </head>
 <body>
     <header class="topo">
-        <h1>🤖 Painel do Bot — Gaicos Store</h1>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <h1 style="margin:0;">🤖 Painel do Bot</h1>
+            <span id="badgePlanoUsuario" style="background:rgba(255,255,255,0.18); padding:4px 10px; border-radius:999px; font-size:0.85em; font-weight:600;"></span>
+        </div>
         <nav class="abas">
             <button type="button" class="aba-botao ativa" data-aba="agendamentos">📅 Agendamentos</button>
             <button type="button" class="aba-botao" data-aba="triagem">🧭 Triagem & IA do Site</button>
             <button type="button" class="aba-botao" data-aba="webhooks">🔗 Integração Site</button>
             <button type="button" class="aba-botao" data-aba="status">⚙️ Status do sistema</button>
+            <button type="button" id="btnAbaAdmin" class="aba-botao oculto" data-aba="admin">👑 Clientes (Admin)</button>
             <a href="./trocar-senha.html" class="link-botao">🔑 Trocar senha</a>
             <button type="button" id="btnSair" class="aba-botao">🚪 Sair</button>
         </nav>
     </header>
+
+    <div id="bannerPlanoGratis" class="oculto" style="max-width:1000px; margin:16px auto 0 auto; padding:12px 18px; background:#fffbeb; border:1px solid #f59e0b; border-radius:10px; color:#92400e; font-size:0.92em;"></div>
+
+    <div id="telaAssinaturaBloqueada" class="oculto" style="max-width:520px; margin:48px auto; background:#fff; padding:28px; border-radius:14px; box-shadow:var(--sombra); text-align:center;">
+        <h2 style="margin-top:0; color:#dc2626;">⛔ Acesso Suspenso / Vencido</h2>
+        <p id="msgAssinaturaBloqueada" style="color:#475569; line-height:1.5;"></p>
+        <button type="button" id="btnSairBloqueado" class="botao-primario">Sair da conta</button>
+    </div>
 
     <main>
         <section id="abaAgendamentos" class="aba">
@@ -277,6 +289,9 @@
         </section>
 
         <section id="abaWebhooks" class="aba oculto">
+            <div id="avisoWebhookPlanoPro" class="oculto" style="background:#fffbeb; border:1px solid #f59e0b; border-radius:10px; padding:12px; margin-bottom:14px; color:#92400e; font-size:0.92em;">
+                <strong>🔒 Recurso exclusivo do Plano Pro:</strong> A integração automática por Webhook do site não está liberada no período de Teste Grátis. Fale com o administrador para ativar seu Plano Pro!
+            </div>
             <div class="cartao-status">
                 <div class="cartao-status-linha">
                     <div>
@@ -403,7 +418,7 @@
                 <div id="infoPm2" class="grade-info-pm2"></div>
             </div>
 
-            <div class="cartao-status">
+            <div id="cartaoSupabaseAdmin" class="cartao-status">
                 <h3 style="margin-top:0;">☁️ Banco de Dados na Nuvem (Supabase & Modo Online 24h)</h3>
                 <p class="texto-ajuda" style="margin-top:0;">
                     Sincroniza seus agendamentos, grupos, contatos, histórico, triagem IA, aprendizado contínuo, mídias e sessão do WhatsApp com o <strong>Supabase</strong> (permitindo também usar o painel pelo GitHub Pages e rodar o motor 24h na nuvem).
@@ -454,6 +469,70 @@
                 </thead>
                 <tbody id="corpoHistorico"></tbody>
             </table>
+        </section>
+
+        <section id="abaAdmin" class="aba oculto">
+            <div class="cartao-status">
+                <div class="cartao-status-linha" style="margin-bottom:10px;">
+                    <h3 style="margin:0;">👑 Visão Geral do Serviço (SaaS)</h3>
+                    <button type="button" id="btnAtualizarClientesAdmin" class="botao-secundario">🔄 Atualizar lista</button>
+                </div>
+                <div id="resumoAdminSaas" class="grade-info-pm2"></div>
+            </div>
+
+            <div class="cartao-status">
+                <h3 style="margin-top:0;">➕ Cadastrar Novo Cliente</h3>
+                <form id="formNovoClienteAdmin">
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px;">
+                        <div>
+                            <label class="rotulo">Nome / Loja</label>
+                            <input type="text" id="admNome" placeholder="Ex: Loja Alpha" required>
+                        </div>
+                        <div>
+                            <label class="rotulo">Usuário de login</label>
+                            <input type="text" id="admUsuario" placeholder="Ex: lojaalpha" required>
+                        </div>
+                        <div>
+                            <label class="rotulo">E-mail / WhatsApp</label>
+                            <input type="text" id="admEmail" placeholder="cliente@email.com">
+                        </div>
+                        <div>
+                            <label class="rotulo">Senha inicial (mín. 8)</label>
+                            <input type="text" id="admSenha" minlength="8" placeholder="Senha inicial" required>
+                        </div>
+                        <div>
+                            <label class="rotulo">Plano</label>
+                            <select id="admPlano" style="width:100%; padding:10px 12px; margin:6px 0; border:1px solid var(--borda); border-radius:8px;">
+                                <option value="pro">Plano Pro (Completo)</option>
+                                <option value="free">Teste Grátis (Limitado)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="rotulo">Validade (dias)</label>
+                            <input type="number" id="admDias" min="1" max="3650" value="30">
+                        </div>
+                    </div>
+                    <button type="submit" class="botao-primario">✅ Cadastrar Cliente</button>
+                </form>
+            </div>
+
+            <div class="cartao-status" style="overflow-x:auto;">
+                <h3 style="margin-top:0;">📋 Clientes e Assinaturas</h3>
+                <table class="tabela-historico">
+                    <thead>
+                        <tr>
+                            <th>Cliente / Login</th>
+                            <th>Plano</th>
+                            <th>Status</th>
+                            <th>Vence em</th>
+                            <th>WhatsApp</th>
+                            <th>Agend.</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpoClientesAdmin"></tbody>
+                </table>
+            </div>
         </section>
     </main>
 
@@ -579,5 +658,6 @@
     <script src="app.js"></script>
     <script src="triagem.js"></script>
     <script src="webhooks.js"></script>
+    <script src="admin.js"></script>
 </body>
 </html>

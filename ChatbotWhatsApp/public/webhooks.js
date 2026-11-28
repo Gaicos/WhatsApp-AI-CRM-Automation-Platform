@@ -11,10 +11,12 @@
   }
 
   function urlEndpointSite() {
+    const tid = window.SESSAO_ATUAL?.tenant?.id;
+    const sufixo = tid && tid !== "admin" ? `/${encodeURIComponent(tid)}` : "";
     if (location.hostname.endsWith("github.io") || location.protocol === "file:") {
-      return "https://whatsapp-ai-crm-worker.onrender.com/api/webhook/site";
+      return `https://whatsapp-ai-crm-worker.onrender.com/api/webhook/site${sufixo}`;
     }
-    return `${window.location.origin}/api/webhook/site`;
+    return `${window.location.origin}/api/webhook/site${sufixo}`;
   }
 
   async function copiarTexto(texto, msgSucesso = "Copiado! 📋") {
@@ -154,6 +156,14 @@
       if (chkAtivo) chkAtivo.checked = cfg.ativo !== false;
       if (inpUrl) inpUrl.value = urlEndpointSite();
       if (inpSegredo) inpSegredo.value = cfg.segredo || "";
+
+      const avisoPlano = document.getElementById("avisoWebhookPlanoPro");
+      const bloqueado = cfg.permitidoNoPlano === false;
+      if (avisoPlano) avisoPlano.classList.toggle("oculto", !bloqueado);
+      ["btnSalvarWebhook", "btnRegenerarWebhookSegredo", "btnTestarWebhook"].forEach((idBtn) => {
+        const b = document.getElementById(idBtn);
+        if (b) b.disabled = bloqueado;
+      });
 
       renderizarEventosConfig(cfg.eventos || {});
       renderizarGuiaProgramador();

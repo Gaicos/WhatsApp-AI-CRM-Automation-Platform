@@ -64,9 +64,14 @@ document.querySelectorAll(".aba-botao").forEach(botao => {
         document.getElementById("abaTriagem").classList.toggle("oculto", aba !== "triagem");
         document.getElementById("abaWebhooks")?.classList.toggle("oculto", aba !== "webhooks");
         document.getElementById("abaStatus").classList.toggle("oculto", aba !== "status");
+        document.getElementById("abaAdmin")?.classList.toggle("oculto", aba !== "admin");
 
         if (aba === "webhooks") {
             window.carregarPainelWebhooks?.();
+        }
+
+        if (aba === "admin") {
+            window.carregarPainelAdmin?.();
         }
 
         if (aba === "status") {
@@ -559,11 +564,19 @@ function renderizarAgendamentos() {
 }
 
 async function salvarAgendamentos() {
-    await fetch("/api/agendamentos", {
+    const resp = await fetch("/api/agendamentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(agendamentos),
     });
+    if (!resp.ok) {
+        const dados = await resp.json().catch(() => ({}));
+        mostrarToast(dados.erro || "Não foi possível salvar os agendamentos.", "erro");
+        agendamentos = await fetch("/api/agendamentos").then(r => r.json()).catch(() => agendamentos);
+        renderizarAgendamentos();
+        return false;
+    }
+    return true;
 }
 
 // ================= MODAL: PREVIEW =================
@@ -1042,7 +1055,8 @@ formAgendamento.addEventListener("submit", async (e) => {
         agendamentos.push(dados);
     }
 
-    await salvarAgendamentos();
+    const salvou = await salvarAgendamentos();
+    if (!salvou) return;
     renderizarAgendamentos();
     fecharModal();
     mostrarToast("Agendamento salvo ✅");
@@ -1096,12 +1110,50 @@ document.getElementById("btnSair").addEventListener("click", async () => {
     window.location.href = "./login.html";
 });
 
-// Início: confere sessão, troca de senha obrigatória e conexão do WhatsApp -----
+document.getElementById("btnSairBloqueado")?.addEventListener("click", async () => {
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "./login.html";
+});
+
+// Início: confere sessão, troca de senha obrigatória, assinatura e conexão do WhatsApp -----
 
 async function iniciarPagina() {
     const sessao = await fetch("/api/sessao").then(r => r.json()).catch(() => ({ logado: false }));
     if (!sessao.logado) { window.location.href = "./login.html"; return; }
     if (sessao.precisaTrocarSenha) { window.location.href = "./trocar-senha.html"; return; }
+
+    window.SESSAO_ATUAL = sessao;
+    const tenant = sessao.tenant || {};
+    const acesso = sessao.acesso || { liberado: true };
+    const ehSuper = tenant.papel === "superadmin";
+
+    const badge = document.getElementById("badgePlanoUsuario");
+    if (badge) {
+        const planoTxt = ehSuper ? "👑 Admin" : (tenant.plano === "pro" ? "⭐ Plano Pro" : `🎁 Grátis (${acesso.diasRestantes ?? 0}d)`);
+        badge.textContent = `${tenant.nome || tenant.usuario || ""} · ${planoTxt}`;
+    }
+
+    document.getElementById("btnAbaAdmin")?.classList.toggle("oculto", !ehSuper);
+    document.getElementById("cartaoSupabaseAdmin")?.classList.toggle("oculto", !ehSuper);
+    document.getElementById("btnReiniciarBot")?.classList.toggle("oculto", !ehSuper);
+
+    if (!acesso.liberado) {
+        document.querySelector("main")?.classList.add("oculto");
+        document.querySelector(".abas")?.classList.add("oculto");
+        const telaBloq = document.getElementById("telaAssinaturaBloqueada");
+        const msgBloq = document.getElementById("msgAssinaturaBloqueada");
+        if (msgBloq) msgBloq.textContent = acesso.mensagem || "Assinatura vencida ou suspensa.";
+        telaBloq?.classList.remove("oculto");
+        return;
+    }
+
+    if (tenant.plano === "free") {
+        const banner = document.getElementById("bannerPlanoGratis");
+        if (banner) {
+            banner.innerHTML = `🎁 <strong>Você está no Teste Gratuito</strong> (restam <strong>${acesso.diasRestantes ?? 7} dia(s)</strong>) — Limite: <strong>1 agendamento</strong>, até <strong>2 grupos / 3 contatos</strong> e <strong>1 mídia</strong>. Fale com o administrador para liberar o <strong>Plano Pro ilimitado</strong>!`;
+            banner.classList.remove("oculto");
+        }
+    }
 
     const status = await fetch("/api/bot/status").then(r => r.json()).catch(() => null);
     if (!status || !status.conexaoWhatsapp.conectado) { window.location.href = "./conectar.html"; return; }

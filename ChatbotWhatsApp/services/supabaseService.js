@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { normalizarTenantId, obterTenantAtual, prefixoAuthWhatsappTenant } from "./tenantContext.js";
 
 const CAMINHO_SUPABASE_CONFIG = "./data/supabase.json";
 
@@ -18,7 +19,8 @@ const MAPA_ARQUIVOS_CHAVES = {
   auth_painel: "./data/auth.json",
   webhooksConfig: "./data/webhooks.json",
   webhooksEventos: "./data/webhooksEventos.json",
-  midiasHistorico: "./data/midiasHistorico.json"
+  midiasHistorico: "./data/midiasHistorico.json",
+  saas_tenants: "./data/tenants.json"
 };
 
 let clienteCache = null;
@@ -34,9 +36,28 @@ let statusSupabase = {
 
 const ultimoTimestampLocalPorChave = new Map();
 
+function resolverCaminhoLocalParaChave(chave) {
+  if (MAPA_ARQUIVOS_CHAVES[chave]) {
+    return MAPA_ARQUIVOS_CHAVES[chave];
+  }
+  const m = /^tenant:([a-z0-9_-]+):([a-zA-Z0-9_]+)$/.exec(String(chave || ""));
+  if (!m) return null;
+  const tid = normalizarTenantId(m[1]);
+  const sufixo = m[2];
+  const caminhoBase = MAPA_ARQUIVOS_CHAVES[sufixo];
+  if (!caminhoBase) return null;
+  const nomeArquivo = path.basename(caminhoBase);
+  return tid === "admin" ? `./data/${nomeArquivo}` : `./data/tenants/${tid}/${nomeArquivo}`;
+}
+
 export function lerConfigSupabase() {
   const envUrl = (process.env.SUPABASE_URL || "").trim();
-  const envKey = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "").trim();
+  const envKey = (
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    ""
+  ).trim();
 
   if (envUrl && envKey) {
     return { ativo: true, url: envUrl, publishableKey: envKey };
@@ -168,6 +189,22 @@ export async function salvarChaveNoSupabase(chave, dados) {
   }
 }
 
+export async function removerDadosTenantNoSupabase(tenantId) {
+  const tid = normalizarTenantId(tenantId);
+  if (tid === "admin") return false;
+  const supabase = obterClienteSupabase();
+  if (!supabase) return false;
+
+  try {
+    await supabase.from("bot_kv_store").delete().like("chave", `tenant:${tid}:%`);
+    const prefixoAuth = prefixoAuthWhatsappTenant(tid);
+    await supabase.from("whatsapp_auth_state").delete().like("chave", `${prefixoAuth}%`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function dadoTemConteudo(valor) {
   if (valor === null || valor === undefined) return false;
   if (Array.isArray(valor)) return valor.length > 0;
@@ -208,6 +245,7 @@ export async function sincronizarTudoComSupabase() {
     let enviadosParaNuvem = 0;
     let baixadosDaNuvem = 0;
 
+    // 1. Chaves da conta principal (admin) e saas_tenants
     for (const [chave, caminhoArquivo] of Object.entries(MAPA_ARQUIVOS_CHAVES)) {
       let dadoLocal = null;
       if (fs.existsSync(caminhoArquivo)) {
@@ -219,17 +257,31 @@ export async function sincronizarTudoComSupabase() {
       const remoto = mapaRemoto.get(chave);
 
       if (!remoto && dadoTemConteudo(dadoLocal)) {
-        // Sobe os dados locais atuais do PC para o Supabase automaticamente
         await salvarChaveNoSupabase(chave, dadoLocal);
         enviadosParaNuvem++;
       } else if (remoto && dadoTemConteudo(remoto.dados)) {
-        // Se na nuvem já existe e local está vazio (ou a nuvem foi atualizada pelo GitHub Pages), atualiza local
         const tsLocal = ultimoTimestampLocalPorChave.get(chave);
         if (!dadoTemConteudo(dadoLocal) || (!tsLocal && remoto.atualizado_em) || (tsLocal && remoto.atualizado_em > tsLocal)) {
+          fs.mkdirSync(path.dirname(caminhoArquivo), { recursive: true });
           fs.writeFileSync(caminhoArquivo, JSON.stringify(remoto.dados, null, 2), "utf-8");
           ultimoTimestampLocalPorChave.set(chave, remoto.atualizado_em);
           baixadosDaNuvem++;
         }
+      }
+    }
+
+    // 2. Chaves isoladas de clientes SaaS (tenant:<id>:<chave>)
+    for (const item of linhasRemotas || []) {
+      if (!String(item.chave || "").startsWith("tenant:")) continue;
+      const caminhoDestino = resolverCaminhoLocalParaChave(item.chave);
+      if (!caminhoDestino || !dadoTemConteudo(item.dados)) continue;
+
+      const tsLocal = ultimoTimestampLocalPorChave.get(item.chave);
+      if (!fs.existsSync(caminhoDestino) || (!tsLocal && item.atualizado_em) || (tsLocal && item.atualizado_em > tsLocal)) {
+        fs.mkdirSync(path.dirname(caminhoDestino), { recursive: true });
+        fs.writeFileSync(caminhoDestino, JSON.stringify(item.dados, null, 2), "utf-8");
+        ultimoTimestampLocalPorChave.set(item.chave, item.atualizado_em);
+        baixadosDaNuvem++;
       }
     }
 
@@ -254,12 +306,12 @@ export async function puxarAtualizacoesRemotasDoSupabase() {
     if (error || !Array.isArray(linhasRemotas)) return;
 
     for (const item of linhasRemotas) {
-      const caminhoArquivo = MAPA_ARQUIVOS_CHAVES[item.chave];
+      const caminhoArquivo = resolverCaminhoLocalParaChave(item.chave);
       if (!caminhoArquivo) continue;
 
       const tsConhecido = ultimoTimestampLocalPorChave.get(item.chave);
       if (!tsConhecido || (item.atualizado_em && item.atualizado_em > tsConhecido)) {
-        fs.mkdirSync("./data", { recursive: true });
+        fs.mkdirSync(path.dirname(caminhoArquivo), { recursive: true });
         fs.writeFileSync(caminhoArquivo, JSON.stringify(item.dados, null, 2), "utf-8");
         ultimoTimestampLocalPorChave.set(item.chave, item.atualizado_em);
       }
@@ -268,25 +320,31 @@ export async function puxarAtualizacoesRemotasDoSupabase() {
   } catch {}
 }
 
-// Faz upload de imagem/vídeo para o Supabase Storage (bucket 'midia')
-export async function enviarMidiaParaSupabaseStorage(caminhoLocal, mimeType = "application/octet-stream") {
+// Faz upload de imagem/vídeo para o Supabase Storage (bucket 'midia') isolado por tenant
+export async function enviarMidiaParaSupabaseStorage(
+  caminhoLocal,
+  mimeType = "application/octet-stream",
+  tenantId = obterTenantAtual()
+) {
   const supabase = obterClienteSupabase();
   if (!supabase) return null;
 
   try {
     const buffer = fs.readFileSync(caminhoLocal);
-    const nomeArquivo = path.basename(caminhoLocal);
+    const tid = normalizarTenantId(tenantId);
+    const nomeBase = path.basename(caminhoLocal);
+    const caminhoStorage = tid === "admin" ? nomeBase : `${tid}/${nomeBase}`;
 
     const { error } = await supabase.storage
       .from("midia")
-      .upload(nomeArquivo, buffer, {
+      .upload(caminhoStorage, buffer, {
         contentType: mimeType,
         upsert: true
       });
 
     if (error) return null;
 
-    const { data } = supabase.storage.from("midia").getPublicUrl(nomeArquivo);
+    const { data } = supabase.storage.from("midia").getPublicUrl(caminhoStorage);
     return data?.publicUrl || null;
   } catch {
     return null;

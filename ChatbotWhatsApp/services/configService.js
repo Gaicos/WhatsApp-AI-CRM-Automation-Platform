@@ -1,115 +1,76 @@
 import fs from "fs";
 import { salvarChaveNoSupabase } from "./supabaseService.js";
+import { caminhoArquivoTenant, chaveSupabaseTenant } from "./tenantContext.js";
 
-const CAMINHO_GRUPOS = "./data/grupos.json";
-const CAMINHO_AGENDAMENTOS = "./data/agendamentos.json";
-const CAMINHO_ENVIOS = "./data/envios.json";
-const CAMINHO_HISTORICO = "./data/historico.json";
-const CAMINHO_CONFIG = "./data/config.json";
-const CAMINHO_CONTATOS = "./data/contatos.json";
-const CAMINHO_LISTAS = "./data/listasContatos.json";
+function lerJsonTenant(nomeArquivo, padrao) {
+    try {
+        return JSON.parse(fs.readFileSync(caminhoArquivoTenant(nomeArquivo), "utf-8"));
+    } catch {
+        return padrao;
+    }
+}
 
-function garantirPastaData() {
-    fs.mkdirSync("./data", { recursive: true });
+function salvarJsonTenant(nomeArquivo, chaveSupabase, dados) {
+    const caminho = caminhoArquivoTenant(nomeArquivo);
+    fs.writeFileSync(caminho, JSON.stringify(dados, null, 2));
+    salvarChaveNoSupabase(chaveSupabaseTenant(chaveSupabase), dados);
 }
 
 export function lerGrupos() {
-    try {
-        return JSON.parse(fs.readFileSync(CAMINHO_GRUPOS, "utf-8"));
-    } catch {
-        return [];
-    }
+    return lerJsonTenant("grupos.json", []);
 }
 
 export function salvarGrupos(grupos) {
-    garantirPastaData();
-    fs.writeFileSync(CAMINHO_GRUPOS, JSON.stringify(grupos, null, 2));
-    salvarChaveNoSupabase("grupos", grupos);
+    salvarJsonTenant("grupos.json", "grupos", grupos);
 }
 
 export function lerAgendamentos() {
-    try {
-        return JSON.parse(fs.readFileSync(CAMINHO_AGENDAMENTOS, "utf-8"));
-    } catch {
-        return [];
-    }
+    return lerJsonTenant("agendamentos.json", []);
 }
 
 export function salvarAgendamentos(agendamentos) {
-    garantirPastaData();
-    fs.writeFileSync(CAMINHO_AGENDAMENTOS, JSON.stringify(agendamentos, null, 2));
-    salvarChaveNoSupabase("agendamentos", agendamentos);
+    salvarJsonTenant("agendamentos.json", "agendamentos", agendamentos);
 }
 
 export function lerEnvios() {
-    try {
-        return JSON.parse(fs.readFileSync(CAMINHO_ENVIOS, "utf-8"));
-    } catch {
-        return {};
-    }
+    return lerJsonTenant("envios.json", {});
 }
 
 export function salvarEnvios(envios) {
-    garantirPastaData();
-    fs.writeFileSync(CAMINHO_ENVIOS, JSON.stringify(envios, null, 2));
-    salvarChaveNoSupabase("envios", envios);
+    salvarJsonTenant("envios.json", "envios", envios);
 }
 
 export function lerHistorico() {
-    try {
-        return JSON.parse(fs.readFileSync(CAMINHO_HISTORICO, "utf-8"));
-    } catch {
-        return [];
-    }
+    return lerJsonTenant("historico.json", []);
 }
 
 export function registrarHistorico(entrada) {
-    garantirPastaData();
     const historico = lerHistorico();
     historico.unshift(entrada);
     if (historico.length > 300) historico.length = 300;
-    fs.writeFileSync(CAMINHO_HISTORICO, JSON.stringify(historico, null, 2));
-    salvarChaveNoSupabase("historico", historico);
+    salvarJsonTenant("historico.json", "historico", historico);
 }
 
 export function lerConfig() {
-    try {
-        return JSON.parse(fs.readFileSync(CAMINHO_CONFIG, "utf-8"));
-    } catch {
-        return { grupoControleId: null };
-    }
+    return lerJsonTenant("config.json", { grupoControleId: null });
 }
 
 export function salvarConfig(config) {
-    garantirPastaData();
-    fs.writeFileSync(CAMINHO_CONFIG, JSON.stringify(config, null, 2));
-    salvarChaveNoSupabase("config", config);
+    salvarJsonTenant("config.json", "config", config);
 }
 
 export function lerContatos() {
-    try {
-        return JSON.parse(fs.readFileSync(CAMINHO_CONTATOS, "utf-8"));
-    } catch {
-        return [];
-    }
+    return lerJsonTenant("contatos.json", []);
 }
 
 export function salvarContatos(contatos) {
-    garantirPastaData();
-    fs.writeFileSync(CAMINHO_CONTATOS, JSON.stringify(contatos, null, 2));
-    salvarChaveNoSupabase("contatos", contatos);
+    salvarJsonTenant("contatos.json", "contatos", contatos);
 }
 
 export function lerListasContatos() {
-    try {
-        return JSON.parse(fs.readFileSync(CAMINHO_LISTAS, "utf-8"));
-    } catch {
-        return [];
-    }
+    return lerJsonTenant("listasContatos.json", []);
 }
 
 export function salvarListasContatos(listas) {
-    garantirPastaData();
-    fs.writeFileSync(CAMINHO_LISTAS, JSON.stringify(listas, null, 2));
-    salvarChaveNoSupabase("listasContatos", listas);
+    salvarJsonTenant("listasContatos.json", "listasContatos", listas);
 }

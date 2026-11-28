@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import { CONHECIMENTO_PADRAO_GAICOS } from "./siteKnowledgeService.js";
 import { salvarChaveNoSupabase } from "./supabaseService.js";
-
-const CAMINHO_APRENDIZADO = "./data/aprendizadoBot.json";
+import { caminhoArquivoTenant, chaveSupabaseTenant, obterTenantAtual } from "./tenantContext.js";
 
 export const PROMPT_SISTEMA_PADRAO = `Você é o atendente virtual da Gaicos Store (https://www.gaicos-store.com.br/), loja de Playmats (personalizados e temáticos) e acessórios de TCG (Yu-Gi-Oh!, Magic, Pokémon).
 
@@ -46,11 +45,12 @@ function extrairTokensRelevantes(str) {
 }
 
 function lerArquivoAprendizado() {
-  if (!fs.existsSync(CAMINHO_APRENDIZADO)) {
+  const caminho = caminhoArquivoTenant("aprendizadoBot.json");
+  if (!fs.existsSync(caminho)) {
     return { exemplos: [], interacoesRecentes: [] };
   }
   try {
-    const lido = JSON.parse(fs.readFileSync(CAMINHO_APRENDIZADO, "utf-8"));
+    const lido = JSON.parse(fs.readFileSync(caminho, "utf-8"));
     return {
       exemplos: Array.isArray(lido?.exemplos) ? lido.exemplos : [],
       interacoesRecentes: Array.isArray(lido?.interacoesRecentes) ? lido.interacoesRecentes : []
@@ -62,11 +62,11 @@ function lerArquivoAprendizado() {
 
 function salvarArquivoAprendizado(dados) {
   try {
-    fs.mkdirSync("./data", { recursive: true });
-    const tmp = `${CAMINHO_APRENDIZADO}.tmp`;
+    const caminho = caminhoArquivoTenant("aprendizadoBot.json");
+    const tmp = `${caminho}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(dados, null, 2), "utf-8");
-    fs.renameSync(tmp, CAMINHO_APRENDIZADO);
-    salvarChaveNoSupabase("aprendizadoBot", dados);
+    fs.renameSync(tmp, caminho);
+    salvarChaveNoSupabase(chaveSupabaseTenant("aprendizadoBot"), dados);
   } catch {}
 }
 
@@ -203,15 +203,20 @@ function buscarRespostaAprendida(perguntaCliente, exemplos = []) {
   return null;
 }
 
+function chaveHistorico(jid) {
+  return `${obterTenantAtual()}:${jid}`;
+}
+
 export function limparHistoricoCliente(jid) {
-  historicoClientes.delete(jid);
+  historicoClientes.delete(chaveHistorico(jid));
 }
 
 function obterHistorico(jid) {
-  const item = historicoClientes.get(jid);
+  const chave = chaveHistorico(jid);
+  const item = historicoClientes.get(chave);
   if (!item) return [];
   if (Date.now() - item.atualizadoEm > TTL_HISTORICO_MS) {
-    historicoClientes.delete(jid);
+    historicoClientes.delete(chave);
     return [];
   }
   return item.mensagens;
@@ -225,7 +230,7 @@ function registrarNoHistorico(jid, pergunta, resposta) {
   while (atual.length > 10) {
     atual.shift();
   }
-  historicoClientes.set(jid, { atualizadoEm: Date.now(), mensagens: atual });
+  historicoClientes.set(chaveHistorico(jid), { atualizadoEm: Date.now(), mensagens: atual });
 }
 
 export function clientePediuAtendenteHumano(texto) {

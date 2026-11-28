@@ -216,7 +216,7 @@ function limparExpiradas() {
     if (mudou) persistirSessoes();
 }
 
-export function criarSessao(usuario, precisaTrocarSenha) {
+export function criarSessao(usuario, precisaTrocarSenha, extras = {}) {
     limparExpiradas();
 
     // limite de sessões simultâneas: descarta as mais antigas
@@ -225,9 +225,27 @@ export function criarSessao(usuario, precisaTrocarSenha) {
 
     const token = crypto.randomBytes(32).toString("hex");
     const agora = Date.now();
-    sessoes.set(hashToken(token), { usuario, precisaTrocarSenha, criadaEm: agora, ultimoUso: agora });
+    sessoes.set(hashToken(token), {
+        usuario,
+        precisaTrocarSenha,
+        tenantId: extras.tenantId || "admin",
+        papel: extras.papel || "superadmin",
+        criadaEm: agora,
+        ultimoUso: agora
+    });
     persistirSessoes();
     return token;
+}
+
+export function encerrarSessoesDoTenant(tenantId) {
+    let mudou = false;
+    for (const [k, s] of sessoes) {
+        if ((s.tenantId || "admin") === tenantId) {
+            sessoes.delete(k);
+            mudou = true;
+        }
+    }
+    if (mudou) persistirSessoes();
 }
 
 export function obterSessao(token) {

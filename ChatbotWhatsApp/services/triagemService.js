@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { lerConfig } from "./configService.js";
 import { salvarChaveNoSupabase } from "./supabaseService.js";
+import { caminhoArquivoTenant, chaveSupabaseTenant, obterTenantAtual, TENANT_PADRAO } from "./tenantContext.js";
 import { CONHECIMENTO_PADRAO_GAICOS, sincronizarConhecimentoSite } from "./siteKnowledgeService.js";
 import {
   PROMPT_SISTEMA_PADRAO,
@@ -21,24 +22,30 @@ export {
   limparInteracoesRecentes
 };
 
-const CAMINHO = "./data/triagem.json";
-const CAMINHO_PAUSAS = "./data/pausasTriagem.json";
 const sessoes = new Map();
 const mensagensGeradasPeloBot = new Set();
 
+function chaveSessao(jid) {
+  return `${obterTenantAtual()}:${jid}`;
+}
+
 function padraoIa() {
+  const ehAdmin = obterTenantAtual() === TENANT_PADRAO;
   return {
-    ativa: true,
+    ativa: ehAdmin,
     provedor: "local", // "local" | "gemini" | "groq" | "openai"
     apiKey: "",
     modelo: "",
-    urlSite: "https://www.gaicos-store.com.br/",
-    conhecimentoSite: CONHECIMENTO_PADRAO_GAICOS,
-    conhecimentoExtra: CONHECIMENTO_EXTRA_PADRAO,
+    urlSite: ehAdmin ? "https://www.gaicos-store.com.br/" : "",
+    conhecimentoSite: ehAdmin ? CONHECIMENTO_PADRAO_GAICOS : "",
+    conhecimentoExtra: ehAdmin ? CONHECIMENTO_EXTRA_PADRAO : "",
     ultimaSincronizacao: null,
-    promptSistema: PROMPT_SISTEMA_PADRAO,
-    mensagemTransferenciaHumano:
-      "Perfeito! Já chamei um atendente humano da *Gaicos Store* para falar com você. Aguarde só um instante que já te respondemos por aqui! 👤",
+    promptSistema: ehAdmin
+      ? PROMPT_SISTEMA_PADRAO
+      : "Você é o atendente virtual da loja. Responda de forma curta, educada e natural (2 a 4 linhas) com base nas informações cadastradas.",
+    mensagemTransferenciaHumano: ehAdmin
+      ? "Perfeito! Já chamei um atendente humano da *Gaicos Store* para falar com você. Aguarde só um instante que já te respondemos por aqui! 👤"
+      : "Perfeito! Já chamei um atendente humano para falar com você. Aguarde só um instante que já te respondemos por aqui! 👤",
     horasPausaHumano: 24,
     pausarAoResponderManual: false,
     avisarGrupoControle: true
@@ -80,26 +87,28 @@ function normalizarDadosTriagem(bruto = {}) {
 }
 
 function lerArquivo() {
-  if (!fs.existsSync(CAMINHO)) return normalizarDadosTriagem({});
+  const caminho = caminhoArquivoTenant("triagem.json");
+  if (!fs.existsSync(caminho)) return normalizarDadosTriagem({});
   try {
-    return normalizarDadosTriagem(JSON.parse(fs.readFileSync(CAMINHO, "utf-8")));
+    return normalizarDadosTriagem(JSON.parse(fs.readFileSync(caminho, "utf-8")));
   } catch {
     return normalizarDadosTriagem({});
   }
 }
 
 function salvarArquivoAtomico(dados) {
-  fs.mkdirSync("./data", { recursive: true });
-  const temporario = `${CAMINHO}.tmp`;
+  const caminho = caminhoArquivoTenant("triagem.json");
+  const temporario = `${caminho}.tmp`;
   fs.writeFileSync(temporario, JSON.stringify(dados, null, 2), "utf-8");
-  fs.renameSync(temporario, CAMINHO);
-  salvarChaveNoSupabase("triagem", dados);
+  fs.renameSync(temporario, caminho);
+  salvarChaveNoSupabase(chaveSupabaseTenant("triagem"), dados);
 }
 
 function lerPausasArquivo() {
-  if (!fs.existsSync(CAMINHO_PAUSAS)) return {};
+  const caminhoPausas = caminhoArquivoTenant("pausasTriagem.json");
+  if (!fs.existsSync(caminhoPausas)) return {};
   try {
-    const dados = JSON.parse(fs.readFileSync(CAMINHO_PAUSAS, "utf-8"));
+    const dados = JSON.parse(fs.readFileSync(caminhoPausas, "utf-8"));
     return (dados && typeof dados === "object") ? dados : {};
   } catch {
     return {};
@@ -108,11 +117,11 @@ function lerPausasArquivo() {
 
 function salvarPausasArquivo(pausas) {
   try {
-    fs.mkdirSync("./data", { recursive: true });
-    const temporario = `${CAMINHO_PAUSAS}.tmp`;
+    const caminhoPausas = caminhoArquivoTenant("pausasTriagem.json");
+    const temporario = `${caminhoPausas}.tmp`;
     fs.writeFileSync(temporario, JSON.stringify(pausas, null, 2), "utf-8");
-    fs.renameSync(temporario, CAMINHO_PAUSAS);
-    salvarChaveNoSupabase("pausasTriagem", pausas);
+    fs.renameSync(temporario, caminhoPausas);
+    salvarChaveNoSupabase(chaveSupabaseTenant("pausasTriagem"), pausas);
   } catch {}
 }
 
@@ -162,7 +171,7 @@ export function pausarAtendimentoHumano(jid, { telefone = "", nome = "", motivo 
     expiraEm: agora + duracaoHoras * 3600 * 1000
   };
   salvarPausasArquivo(pausas);
-  sessoes.delete(jid);
+  sessoes.delete(chaveSessao(jid));
 }
 
 export function reativarAtendimentoBot(jid) {
@@ -271,7 +280,7 @@ function montarTexto(node, iaAtiva = false) {
 }
 
 export function resetarSessaoTriagem(jid) {
-  sessoes.delete(jid);
+  sessoes.delete(chaveSessao(jid));
   limparHistoricoCliente(jid);
 }
 
@@ -430,12 +439,12 @@ export async function processarTriagem(sock, msg) {
     return true;
   }
 
-  const nodeAtualId = sessoes.get(jid);
+  const nodeAtualId = sessoes.get(chaveSessao(jid));
   const ehSaudacaoCurta = /^(oi+|ola+|olá+|opa+|bom dia|boa tarde|boa noite|menu|\/?start|#bot)$/i.test(texto);
 
   // Caso 1: Tem menu inicial configurado e cliente acabou de chegar com saudação curta ou pediu start/menu
   if (temMenuInicial && (!nodeAtualId || pediuReinicio) && (ehSaudacaoCurta || !iaAtiva)) {
-    sessoes.set(jid, config.nodeInicial);
+    sessoes.set(chaveSessao(jid), config.nodeInicial);
     let resposta = config.boasVindas?.trim();
     const node = config.nodes.find(item => item.id === config.nodeInicial);
     if (!node) return true;
@@ -479,17 +488,17 @@ export async function processarTriagem(sock, msg) {
       }
 
       if (!opcao.proxima) {
-        sessoes.delete(jid);
+        sessoes.delete(chaveSessao(jid));
         return true;
       }
 
       const proximo = config.nodes.find(item => item.id === opcao.proxima);
       if (!proximo) {
-        sessoes.delete(jid);
+        sessoes.delete(chaveSessao(jid));
         await enviarMensagemBot(sock, jid, { text: "Esta etapa não está disponível. Digite start para recomeçar." });
         return true;
       }
-      sessoes.set(jid, proximo.id);
+      sessoes.set(chaveSessao(jid), proximo.id);
       await enviarMensagemBot(sock, jid, { text: montarTexto(proximo, iaAtiva) });
       return true;
     }

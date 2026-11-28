@@ -4,7 +4,9 @@ ChatbotWhatsApp/node_modules/
 
 # Sessão e chaves de autenticação do WhatsApp (NUNCA subir para o GitHub)
 auth_info/
+auth_info_tenants/
 ChatbotWhatsApp/auth_info/
+ChatbotWhatsApp/auth_info_tenants/
 
 # Dados pessoais, agendamentos, contatos, grupos, senhas e configurações locais
 data/*

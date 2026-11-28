@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import { salvarChaveNoSupabase } from "./supabaseService.js";
-
-const CAMINHO_HISTORICO = "./data/midiasHistorico.json";
+import { caminhoArquivoTenant, chaveSupabaseTenant } from "./tenantContext.js";
 
 function embaralhar(lista, rng = Math.random) {
   const copia = [...lista];
@@ -23,9 +22,10 @@ export function normalizarQtdMidiasEnvio(valor) {
 }
 
 export function lerHistoricoMidias() {
-  if (!fs.existsSync(CAMINHO_HISTORICO)) return {};
+  const caminho = caminhoArquivoTenant("midiasHistorico.json");
+  if (!fs.existsSync(caminho)) return {};
   try {
-    const lido = JSON.parse(fs.readFileSync(CAMINHO_HISTORICO, "utf-8"));
+    const lido = JSON.parse(fs.readFileSync(caminho, "utf-8"));
     return lido && typeof lido === "object" && !Array.isArray(lido) ? lido : {};
   } catch {
     return {};
@@ -34,11 +34,11 @@ export function lerHistoricoMidias() {
 
 function salvarHistoricoMidias(dados) {
   try {
-    fs.mkdirSync("./data", { recursive: true });
-    const tmp = `${CAMINHO_HISTORICO}.tmp`;
+    const caminho = caminhoArquivoTenant("midiasHistorico.json");
+    const tmp = `${caminho}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(dados, null, 2), "utf-8");
-    fs.renameSync(tmp, CAMINHO_HISTORICO);
-    salvarChaveNoSupabase("midiasHistorico", dados);
+    fs.renameSync(tmp, caminho);
+    salvarChaveNoSupabase(chaveSupabaseTenant("midiasHistorico"), dados);
   } catch {}
 }
 

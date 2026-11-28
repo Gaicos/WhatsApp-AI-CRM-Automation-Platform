@@ -1,6 +1,7 @@
 import { lerAgendamentos, lerEnvios, salvarEnvios } from "../services/configService.js";
-import { getSock } from "../whatsapp/whatsappService.js";
+import { statusConexao } from "../whatsapp/whatsappService.js";
 import { deveEnviarNoDia } from "../services/recorrenciaService.js";
+import { executarNoTenant, TENANT_PADRAO } from "../services/tenantContext.js";
 
 /**
  * Resolve hora atual, data ISO local e Date de referencia no fuso horario configurado,
@@ -30,33 +31,43 @@ export function obterDataHoraNoFuso(agora = new Date(), fuso = process.env.TZ ||
     return { horaAtual, chaveDia, dataReferencia };
 }
 
-export function iniciarScheduler(enviarFn) {
-    console.log("📅 Agendamentos monitorados e prontos para envio.");
+export function iniciarScheduler(enviarFn, listarTenantsFn = () => [{ id: TENANT_PADRAO }]) {
+    console.log("📅 Agendamentos multi-tenant monitorados e prontos para envio.");
 
     async function verificar() {
         try {
-            if (!getSock()) return; // bot desligado/desconectado: espera reconectar
-
-            const agendamentos = lerAgendamentos();
-            const ultimoEnvio = lerEnvios();
+            const tenants = typeof listarTenantsFn === "function" ? listarTenantsFn() : [{ id: TENANT_PADRAO }];
             const agora = new Date();
             const { horaAtual, chaveDia, dataReferencia } = obterDataHoraNoFuso(agora);
 
-            for (const agendamento of agendamentos) {
-                if (!agendamento.ativo) continue;
+            for (const tenant of tenants) {
+                const tid = tenant?.id || TENANT_PADRAO;
+                await executarNoTenant(tid, async () => {
+                    try {
+                        if (!statusConexao(tid).conectado) return;
 
-                const jaEnviouHoje =
-                    ultimoEnvio[agendamento.id] === chaveDia ||
-                    ultimoEnvio[agendamento.id] === agora.toDateString();
-                const horarioBate = agendamento.horario === horaAtual;
+                        const agendamentos = lerAgendamentos();
+                        const ultimoEnvio = lerEnvios();
 
-                // deveEnviarNoDia cuida da recorrência (todo dia, dia sim/dia não, a cada N dias)
-                if (horarioBate && !jaEnviouHoje && deveEnviarNoDia(agendamento, dataReferencia)) {
-                    ultimoEnvio[agendamento.id] = chaveDia;
-                    salvarEnvios(ultimoEnvio);
+                        for (const agendamento of agendamentos) {
+                            if (!agendamento.ativo) continue;
 
-                    await enviarFn(agendamento);
-                }
+                            const jaEnviouHoje =
+                                ultimoEnvio[agendamento.id] === chaveDia ||
+                                ultimoEnvio[agendamento.id] === agora.toDateString();
+                            const horarioBate = agendamento.horario === horaAtual;
+
+                            if (horarioBate && !jaEnviouHoje && deveEnviarNoDia(agendamento, dataReferencia)) {
+                                ultimoEnvio[agendamento.id] = chaveDia;
+                                salvarEnvios(ultimoEnvio);
+
+                                await enviarFn(agendamento, tenant);
+                            }
+                        }
+                    } catch (errTenant) {
+                        console.log(`Erro no scheduler [${tid}]:`, errTenant.message);
+                    }
+                });
             }
         } catch (err) {
             console.log("Erro no scheduler:", err.message);

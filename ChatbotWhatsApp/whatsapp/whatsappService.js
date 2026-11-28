@@ -1,4 +1,3 @@
-
 import { makeWASocket, useMultiFileAuthState, DisconnectReason } from "@itsliaaa/baileys";
 import * as baileysLib from "@itsliaaa/baileys";
 import qrcodeTerminal from "qrcode-terminal";
@@ -16,8 +15,39 @@ import {
     limparAuthWhatsappNoSupabase
 } from "../services/supabaseAuthStateService.js";
 import { obterClienteSupabase } from "../services/supabaseService.js";
+import {
+    obterTenantAtual,
+    normalizarTenantId,
+    executarNoTenant,
+    prefixoAuthWhatsappTenant,
+    pastaAuthLocalTenant
+} from "../services/tenantContext.js";
 
-function deveUsarAuthSupabase() {
+const sessoesWhatsapp = new Map();
+
+function obterEstado(tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    let st = sessoesWhatsapp.get(tid);
+    if (!st) {
+        st = {
+            tenantId: tid,
+            sockAtual: null,
+            desligadoManualmente: false,
+            sessaoInvalida: false,
+            whatsappConectado: false,
+            qrAtual: null,
+            tentativasFalhas: 0,
+            geracaoAtual: 0,
+            gruposRecebidos: new Map(),
+            credenciaisAtuais: null,
+            erroConexao: null
+        };
+        sessoesWhatsapp.set(tid, st);
+    }
+    return st;
+}
+
+function deveUsarAuthSupabase(pastaLocal) {
     if (!obterClienteSupabase()) return false;
     if (process.env.USE_SUPABASE_AUTH === "true") return true;
     const emNuvem = Boolean(
@@ -28,14 +58,8 @@ function deveUsarAuthSupabase() {
         process.env.CLOUD_MODE
     );
     if (emNuvem) return true;
-    return Boolean(process.env.SUPABASE_URL) && !fs.existsSync("./auth_info/creds.json");
+    return Boolean(process.env.SUPABASE_URL) && !fs.existsSync(`${pastaLocal}/creds.json`);
 }
-
-let sockAtual = null;
-let desligadoManualmente = false;
-let sessaoInvalida = false;
-let whatsappConectado = false;
-let qrAtual = null;
 
 // Oculta objetos criptograficos internos da Baileys/libsignal.
 const consoleInfoOriginal = console.info.bind(console);
@@ -54,176 +78,182 @@ async function obterVersaoWhatsapp() {
             return undefined;
         }
         const resultado = await buscar();
-        const versao = resultado.version;
-        return versao;
+        return resultado.version;
     } catch (err) {
         console.log("Não consegui buscar a versão atual do WhatsApp:", err.message);
         return undefined;
     }
 }
-let tentativasFalhas = 0;
-let geracaoAtual = 0;
-const gruposRecebidos = new Map(); // id -> metadados recebidos pelos eventos          // cada nova conexão ganha um número; eventos de conexões antigas são ignorados
-let credenciaisAtuais = null;  // para saber se o aparelho já foi pareado (registered) ou ainda está no QR
-let erroConexao = null;
+
 const MAX_TENTATIVAS = 8;
 
-function esperaEntreTentativas() {
+function esperaEntreTentativas(tentativasFalhas) {
     // 5s, 10s, 20s, 40s... até 5 minutos. Evita martelar o WhatsApp.
     return Math.min(5000 * 2 ** (tentativasFalhas - 1), 5 * 60 * 1000);
 }
 
-// Conexão com o WhatsApp
-export async function conectarWhatsApp() {
-    desligadoManualmente = false;
-    sessaoInvalida = false;
-    whatsappConectado = false;
-    qrAtual = null;
+// Conexão com o WhatsApp isolada por tenantId
+export async function conectarWhatsApp(tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
 
-    const usandoSupabaseAuth = deveUsarAuthSupabase();
+    st.desligadoManualmente = false;
+    st.sessaoInvalida = false;
+    st.whatsappConectado = false;
+    st.qrAtual = null;
+
+    if (st.sockAtual) {
+        try { st.sockAtual.end(new Error("Reconectando sessão")); } catch {}
+        st.sockAtual = null;
+    }
+
+    const prefixo = prefixoAuthWhatsappTenant(tid);
+    const pastaLocal = pastaAuthLocalTenant(tid);
+    const usandoSupabaseAuth = deveUsarAuthSupabase(pastaLocal);
+
     let state;
     let saveCreds;
     if (usandoSupabaseAuth) {
-        const authNuvem = await useSupabaseAuthState();
+        const authNuvem = await useSupabaseAuthState(null, prefixo);
         state = authNuvem.state;
         saveCreds = authNuvem.saveCreds;
-        console.log("☁️ Usando sessão do WhatsApp 100% na nuvem (Supabase).");
+        console.log(`☁️ [${tid}] Usando sessão do WhatsApp 100% na nuvem (Supabase).`);
     } else {
-        await restaurarAuthWhatsappDoSupabase("auth_info");
-        const authLocal = await useMultiFileAuthState("auth_info");
+        await restaurarAuthWhatsappDoSupabase(pastaLocal, prefixo);
+        const authLocal = await useMultiFileAuthState(pastaLocal);
         state = authLocal.state;
         saveCreds = authLocal.saveCreds;
     }
-    credenciaisAtuais = state.creds;
-    const minhaGeracao = ++geracaoAtual;
+
+    st.credenciaisAtuais = state.creds;
+    const minhaGeracao = ++st.geracaoAtual;
 
     const versao = await obterVersaoWhatsapp();
     const sock = versao
         ? makeWASocket({ auth: state, version: versao, logger: loggerBaileys })
         : makeWASocket({ auth: state, logger: loggerBaileys });
-    sockAtual = sock;
+    st.sockAtual = sock;
 
-    sock.ev.on("creds.update", async () => {
+    sock.ev.on("creds.update", () => executarNoTenant(tid, async () => {
         await saveCreds();
         if (!usandoSupabaseAuth) {
-            await salvarCredsWhatsappNoSupabase("auth_info");
+            await salvarCredsWhatsappNoSupabase(pastaLocal, prefixo);
         }
-    });
+    }));
 
     // Grupos chegam aos poucos durante a sincronização; guarda os que forem recebidos.
     const registrarGrupos = (lista) => {
         for (const g of lista || []) {
-            if (g?.id) gruposRecebidos.set(g.id, { subject: g.subject, announce: !!g.announce, isCommunity: !!g.isCommunity });
+            if (g?.id) st.gruposRecebidos.set(g.id, { subject: g.subject, announce: !!g.announce, isCommunity: !!g.isCommunity });
         }
     };
     sock.ev.on("groups.upsert", registrarGrupos);
-    sock.ev.on("groups.update", (lista) => registrarGrupos(lista));
+    sock.ev.on("groups.update", registrarGrupos);
 
-    sock.ev.on("connection.update", async (update) => {
-        if (minhaGeracao !== geracaoAtual) return; // evento de uma conexão substituída
+    sock.ev.on("connection.update", (update) => executarNoTenant(tid, async () => {
+        if (minhaGeracao !== st.geracaoAtual) return;
         const { connection, qr, lastDisconnect } = update;
 
         if (qr) {
-            qrcodeTerminal.generate(qr, { small: true });
-
+            if (tid === "admin") qrcodeTerminal.generate(qr, { small: true });
             try {
-                qrAtual = await QRCode.toDataURL(qr);
+                st.qrAtual = await QRCode.toDataURL(qr);
             } catch (err) {
-                console.log("Erro ao gerar imagem do QR Code:", err.message);
+                console.log(`[${tid}] Erro ao gerar imagem do QR Code:`, err.message);
             }
         }
 
         if (connection === "open") {
-            whatsappConectado = true;
-            qrAtual = null;
-            sessaoInvalida = false;
-            tentativasFalhas = 0;
-            erroConexao = null;
-            salvarCredsWhatsappNoSupabase("auth_info");
-            console.log("✅ WhatsApp conectado e pronto para enviar mensagens.");
+            st.whatsappConectado = true;
+            st.qrAtual = null;
+            st.sessaoInvalida = false;
+            st.tentativasFalhas = 0;
+            st.erroConexao = null;
+            if (!usandoSupabaseAuth) {
+                salvarCredsWhatsappNoSupabase(pastaLocal, prefixo);
+            }
+            console.log(`✅ [${tid}] WhatsApp conectado e pronto para enviar mensagens.`);
         }
 
         if (connection === "close") {
-            whatsappConectado = false;
-            qrAtual = null;
-            sockAtual = null;
+            st.whatsappConectado = false;
+            st.qrAtual = null;
+            st.sockAtual = null;
 
-            if (desligadoManualmente) {
-                console.log("🔌 Bot desligado manualmente — não vai reconectar sozinho.");
+            if (st.desligadoManualmente) {
+                console.log(`🔌 [${tid}] Bot desligado manualmente — não vai reconectar sozinho.`);
                 return;
             }
 
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const deveReconectar = statusCode !== DisconnectReason.loggedOut;
 
-            console.log(`❌ Conexão encerrada (código ${statusCode}).`);
+            console.log(`❌ [${tid}] Conexão encerrada (código ${statusCode}).`);
 
-                        if (statusCode === 440) {
-                erroConexao = "Outro programa assumiu esta conta do WhatsApp. Feche o outro bot e clique em Ligar.";
-                console.log("⛔ Outro programa usou esta conta do WhatsApp. Não vou reconectar para não brigar com ele.");
+            if (statusCode === 440) {
+                st.erroConexao = "Outro aparelho/instância assumiu esta conta do WhatsApp. Feche o outro e clique em Ligar.";
+                console.log(`⛔ [${tid}] Conflito 440 no WhatsApp. Não vou reconectar automaticamente.`);
                 return;
             }
 
             if (deveReconectar) {
-                tentativasFalhas++;
-                const pareando = !credenciaisAtuais?.registered;
+                st.tentativasFalhas++;
+                const pareando = !st.credenciaisAtuais?.registered;
 
                 if (statusCode === 405) {
-                    erroConexao = "O WhatsApp recusou a conexão: a biblioteca está desatualizada. Feche o programa e clique duas vezes em Atualizar Bibliotecas.bat.";
+                    st.erroConexao = "O WhatsApp recusou a conexão (código 405).";
                 } else if (pareando) {
-                    erroConexao = null; // ainda no QR Code: não é erro, só aguardando a leitura
+                    st.erroConexao = null;
                 } else {
-                    erroConexao = `Não foi possível conectar (código ${statusCode}).`;
+                    st.erroConexao = `Não foi possível conectar (código ${statusCode}).`;
                 }
 
-                // Enquanto o aparelho não foi pareado, nunca desiste: sempre gera um novo QR Code.
-                if (!pareando && tentativasFalhas >= MAX_TENTATIVAS) {
-                    console.log("⛔ Muitas tentativas sem sucesso. Use o botão Ligar ou Gerar novo QR Code depois de resolver.");
+                if (!pareando && st.tentativasFalhas >= MAX_TENTATIVAS) {
+                    console.log(`⛔ [${tid}] Muitas tentativas sem sucesso. Use o botão Ligar ou Gerar novo QR Code.`);
                     return;
                 }
                 const espera = pareando
-                    ? Math.min(2000 * tentativasFalhas, 15000)
-                    : esperaEntreTentativas();
-                console.log(`${pareando ? "Gerando novo QR Code" : "Nova tentativa"} em ${espera / 1000}s...`);
+                    ? Math.min(2000 * st.tentativasFalhas, 15000)
+                    : esperaEntreTentativas(st.tentativasFalhas);
+                console.log(`[${tid}] ${pareando ? "Gerando novo QR Code" : "Nova tentativa"} em ${espera / 1000}s...`);
                 setTimeout(() => {
-                    conectarWhatsApp().catch(err => console.log("Erro ao reconectar:", err.message));
+                    conectarWhatsApp(tid).catch(err => console.log(`[${tid}] Erro ao reconectar:`, err.message));
                 }, espera);
             } else {
-                sessaoInvalida = true;
-                // Credenciais já não valem mais: apaga a sessão antiga e gera um QR Code novo.
-                fs.rmSync("./auth_info", { recursive: true, force: true });
-                limparAuthWhatsappNoSupabase();
-                console.log("⚠️ Sessão encerrada pelo WhatsApp. Pasta auth_info removida; gerando novo QR Code...");
-                setTimeout(() => conectarWhatsApp(), 1000);
+                st.sessaoInvalida = true;
+                fs.rmSync(pastaLocal, { recursive: true, force: true });
+                await limparAuthWhatsappNoSupabase(prefixo);
+                console.log(`⚠️ [${tid}] Sessão encerrada pelo WhatsApp. Credenciais removidas; gerando novo QR Code...`);
+                setTimeout(() => {
+                    conectarWhatsApp(tid).catch(err => console.log(`[${tid}] Erro ao regenerar QR:`, err.message));
+                }, 1000);
             }
         }
-    });
+    }));
 
-    sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    sock.ev.on("messages.upsert", ({ messages, type }) => executarNoTenant(tid, async () => {
         if (type && type !== "notify") return;
         for (const msg of messages) {
-            await processarComando(sock, msg);
+            await processarComando(sock, msg, tid);
         }
-    });
+    }));
 
     return sock;
 }
 
-// Retorna o QR Code atual
-export function getQrAtual() {
-    return qrAtual;
+export function getQrAtual(tenantId = obterTenantAtual()) {
+    return obterEstado(tenantId).qrAtual;
 }
 
-// Processamento dos comandos recebidos
-async function processarComando(sock, msg) {
+// Processamento dos comandos recebidos dentro do tenant correspondente
+async function processarComando(sock, msg, tenantId = obterTenantAtual()) {
     if (!msg.message) return;
 
-    // Triagem automática de mensagens privadas. Comandos remotos continuam separados abaixo.
     try {
         const respondeuTriagem = await processarTriagem(sock, msg);
         if (respondeuTriagem) return;
     } catch (err) {
-        console.log("Erro ao processar triagem automática:", err.message);
+        console.log(`[${tenantId}] Erro ao processar triagem automática:`, err.message);
     }
 
     const config = lerConfig();
@@ -239,7 +269,7 @@ async function processarComando(sock, msg) {
     try {
         if (comando === "!status") {
             const pm2Info = statusProcesso();
-            const conexao = statusConexao();
+            const conexao = statusConexao(tenantId);
 
             let resposta = `🤖 Status do bot\n\n`;
             resposta += `Conexão WhatsApp: ${conexao.conectado ? "✅ conectado" : "🔌 desconectado"}\n`;
@@ -247,7 +277,6 @@ async function processarComando(sock, msg) {
             if (pm2Info) {
                 const horas = (pm2Info.uptimeMs / 3600000).toFixed(1);
                 const memMb = (pm2Info.memoria / 1024 / 1024).toFixed(1);
-
                 resposta += `Programa: ${pm2Info.status}\nNo ar: ${horas}h\nMemória: ${memMb} MB\nCPU: ${pm2Info.cpu}%`;
             } else {
                 resposta += `Programa: indisponível`;
@@ -261,9 +290,9 @@ async function processarComando(sock, msg) {
         } else if (comando === "!agendamentos") {
             await sock.sendMessage(destino, { text: textoAgendamentos() });
 
-        } else if (comando === "!restart") {
+        } else if (comando === "!restart" && normalizarTenantId(tenantId) === "admin") {
             await sock.sendMessage(destino, {
-                text: "🔄 Reiniciando o programa... aguarde alguns segundos."
+                text: "🔄 Reiniciando o servidor... aguarde alguns segundos."
             });
             reiniciarProcesso();
 
@@ -271,86 +300,101 @@ async function processarComando(sock, msg) {
             await sock.sendMessage(destino, { text: textoAjuda() });
         }
     } catch (err) {
-        console.log("Erro ao processar comando:", err.message);
+        console.log(`[${tenantId}] Erro ao processar comando:`, err.message);
     }
 }
 
-// Retorna o socket atual
-export function getSock() {
-    return sockAtual;
+export function getSock(tenantId = obterTenantAtual()) {
+    return obterEstado(tenantId).sockAtual;
 }
 
-export function getGruposRecebidos() {
-    return Object.fromEntries(gruposRecebidos);
+export function getGruposRecebidos(tenantId = obterTenantAtual()) {
+    return Object.fromEntries(obterEstado(tenantId).gruposRecebidos);
 }
 
-// Gera um novo QR Code (usado quando o usuário perdeu ou não conseguiu ler o anterior)
-export async function gerarNovoQr() {
-    tentativasFalhas = 0;
-    erroConexao = null;
-    desligadoManualmente = false;
-    if (sockAtual) {
-        try { sockAtual.end(new Error("Novo QR Code solicitado")); } catch {}
-        sockAtual = null;
+export async function gerarNovoQr(tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
+    st.tentativasFalhas = 0;
+    st.erroConexao = null;
+    st.desligadoManualmente = false;
+    if (st.sockAtual) {
+        try { st.sockAtual.end(new Error("Novo QR Code solicitado")); } catch {}
+        st.sockAtual = null;
     }
-    whatsappConectado = false;
-    qrAtual = null;
-    if (!credenciaisAtuais?.registered) {
-        // ainda não pareado: apaga a tentativa anterior para começar limpo
-        fs.rmSync("./auth_info", { recursive: true, force: true });
-        await limparAuthWhatsappNoSupabase();
+    st.whatsappConectado = false;
+    st.qrAtual = null;
+    if (!st.credenciaisAtuais?.registered) {
+        fs.rmSync(pastaAuthLocalTenant(tid), { recursive: true, force: true });
+        await limparAuthWhatsappNoSupabase(prefixoAuthWhatsappTenant(tid));
     }
-    await conectarWhatsApp();
+    await conectarWhatsApp(tid);
 }
 
-// Desconecta o WhatsApp e remove este aparelho da conta (usado na desinstalação)
-export async function sairDoWhatsapp() {
-    desligadoManualmente = true;
-    const sock = sockAtual;
+export async function sairDoWhatsapp(tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
+    st.desligadoManualmente = true;
+    const sock = st.sockAtual;
     if (sock) {
-        try { await sock.logout(); } catch (err) { console.log("Aviso ao sair do WhatsApp:", err.message); }
+        try { await sock.logout(); } catch (err) { console.log(`[${tid}] Aviso ao sair do WhatsApp:`, err.message); }
     }
-    sockAtual = null;
-    whatsappConectado = false;
+    st.sockAtual = null;
+    st.whatsappConectado = false;
+    st.qrAtual = null;
+    fs.rmSync(pastaAuthLocalTenant(tid), { recursive: true, force: true });
+    await limparAuthWhatsappNoSupabase(prefixoAuthWhatsappTenant(tid));
 }
 
-// Desliga o bot manualmente
-export function desligarBot() {
-    desligadoManualmente = true;
-    whatsappConectado = false;
-    qrAtual = null;
+export function desligarBot(tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
+    st.desligadoManualmente = true;
+    st.whatsappConectado = false;
+    st.qrAtual = null;
 
-    if (sockAtual) {
+    if (st.sockAtual) {
         try {
-            sockAtual.end(new Error("Desligado manualmente pelo painel"));
+            st.sockAtual.end(new Error("Desligado manualmente pelo painel"));
         } catch {}
 
-        sockAtual = null;
-        console.log("🔌 Bot desligado manualmente pelo painel.");
+        st.sockAtual = null;
+        console.log(`🔌 [${tid}] Bot desligado manualmente pelo painel.`);
     }
 }
 
-// Liga o bot novamente
-export async function ligarBot() {
-    if (sockAtual) return;
-    tentativasFalhas = 0;
-    erroConexao = null;
+export async function ligarBot(tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
+    const st = obterEstado(tid);
+    if (st.sockAtual) return;
+    st.tentativasFalhas = 0;
+    st.erroConexao = null;
 
-    console.log("🔌 Ligando o bot novamente...");
-    await conectarWhatsApp();
+    console.log(`🔌 [${tid}] Ligando o bot...`);
+    await conectarWhatsApp(tid);
 }
 
-// Status real da conexão
-export function statusConexao() {
+export function statusConexao(tenantId = obterTenantAtual()) {
+    const st = obterEstado(tenantId);
     return {
-        conectado: whatsappConectado,
-        desligadoManualmente,
-        sessaoInvalida,
-        erroConexao
+        conectado: st.whatsappConectado,
+        desligadoManualmente: st.desligadoManualmente,
+        sessaoInvalida: st.sessaoInvalida,
+        erroConexao: st.erroConexao
     };
 }
 
-// Intervalo aleatório entre envios
+export function listarStatusSessoesWhatsapp() {
+    const mapa = {};
+    for (const [tid, st] of sessoesWhatsapp.entries()) {
+        mapa[tid] = {
+            conectado: !!st.whatsappConectado,
+            erroConexao: st.erroConexao || null
+        };
+    }
+    return mapa;
+}
+
 function delayAleatorio(minMs, maxMs) {
     const tempo = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
     return new Promise(resolve => setTimeout(resolve, tempo));
@@ -370,7 +414,6 @@ async function carregarBufferMidia(midia) {
     return fs.readFileSync(caminho);
 }
 
-// Envio de mensagens e mídias para um grupo
 async function enviarParaGrupo(sock, grupoId, mensagem) {
     const { texto, midias } = mensagem;
 
@@ -446,107 +489,121 @@ export async function resolverJidDestino(sock, destino) {
     return jid;
 }
 
-// Envio para vários grupos e contatos
-export async function enviarMensagemGrupos(grupos, mensagem, contexto = {}) {
+// Envio para vários grupos e contatos de um tenant
+export async function enviarMensagemGrupos(grupos, mensagem, contexto = {}, tenantId = obterTenantAtual()) {
+    const tid = normalizarTenantId(tenantId);
     const resultado = { enviados: 0, falhas: 0 };
-    for (const grupo of grupos) {
-        const sock = getSock();
-        const nomeDestino = grupo.nome || grupo.id || "destino";
 
-        if (!sock || !whatsappConectado) {
-            console.log("⚠️ WhatsApp não conectado, abortando envios.");
+    return executarNoTenant(tid, async () => {
+        for (const grupo of grupos) {
+            const st = obterEstado(tid);
+            const sock = st.sockAtual;
+            const nomeDestino = grupo.nome || grupo.id || "destino";
 
-            registrarHistorico({
-                data: new Date().toISOString(),
-                horario: contexto.horario || null,
-                origem: contexto.origem || "agendado",
-                grupo: nomeDestino,
-                sucesso: false,
-                erro: "WhatsApp não conectado",
-            });
-            resultado.falhas++;
-            return resultado;
+            if (!sock || !st.whatsappConectado) {
+                console.log(`⚠️ [${tid}] WhatsApp não conectado, abortando envios.`);
+
+                registrarHistorico({
+                    data: new Date().toISOString(),
+                    horario: contexto.horario || null,
+                    origem: contexto.origem || "agendado",
+                    grupo: nomeDestino,
+                    sucesso: false,
+                    erro: "WhatsApp não conectado",
+                });
+                resultado.falhas++;
+                return resultado;
+            }
+
+            try {
+                const jidDestino = await resolverJidDestino(sock, grupo);
+                await enviarParaGrupo(sock, jidDestino, mensagem);
+
+                console.log(`[${tid}] [${new Date().toLocaleTimeString()}] ✅ Enviado para: ${grupo.nome}`);
+
+                registrarHistorico({
+                    data: new Date().toISOString(),
+                    horario: contexto.horario || null,
+                    origem: contexto.origem || "agendado",
+                    grupo: nomeDestino,
+                    sucesso: true,
+                    erro: null,
+                });
+                resultado.enviados++;
+
+            } catch (err) {
+                console.log(`[${tid}] [${new Date().toLocaleTimeString()}] ❌ Falhou em: ${grupo.nome} — ${err.message}`);
+
+                registrarHistorico({
+                    data: new Date().toISOString(),
+                    horario: contexto.horario || null,
+                    origem: contexto.origem || "agendado",
+                    grupo: nomeDestino,
+                    sucesso: false,
+                    erro: err.message,
+                });
+                resultado.falhas++;
+            }
+
+            await delayAleatorio(8000, 20000);
         }
 
-        try {
-            const jidDestino = await resolverJidDestino(sock, grupo);
-            await enviarParaGrupo(sock, jidDestino, mensagem);
-
-            console.log(`[${new Date().toLocaleTimeString()}] ✅ Enviado para: ${grupo.nome}`);
-
-            registrarHistorico({
-                data: new Date().toISOString(),
-                horario: contexto.horario || null,
-                origem: contexto.origem || "agendado",
-                grupo: nomeDestino,
-                sucesso: true,
-                erro: null,
-            });
-            resultado.enviados++;
-
-        } catch (err) {
-            console.log(`[${new Date().toLocaleTimeString()}] ❌ Falhou em: ${grupo.nome} — ${err.message}`);
-
-            registrarHistorico({
-                data: new Date().toISOString(),
-                horario: contexto.horario || null,
-                origem: contexto.origem || "agendado",
-                grupo: nomeDestino,
-                sucesso: false,
-                erro: err.message,
-            });
-            resultado.falhas++;
-        }
-
-        await delayAleatorio(8000, 20000);
-    }
-
-    console.log("🏁 Envio para todos os grupos concluído.");
-    return resultado;
+        console.log(`🏁 [${tid}] Envio para todos os destinos concluído.`);
+        return resultado;
+    });
 }
 
 /**
  * Envia uma mensagem direta (texto ou mídia por URL pública) para um número ou JID de grupo.
  * Usada pelo Webhook de integração com o site e alertas no Grupo de Controle.
  */
-export async function enviarMensagemDireta(destino, { texto = "", midiaUrl = "", tipoMidia = "imagem" } = {}, contexto = {}) {
-    const sock = getSock();
-    if (!sock || !whatsappConectado) {
-        throw new Error("WhatsApp não conectado.");
-    }
-
-    const jid = await resolverJidDestino(sock, destino);
-
-    try {
-        if (midiaUrl) {
-            const buffer = await carregarBufferMidia({ caminho: midiaUrl, urlPublica: midiaUrl });
-            const payloadMidia = tipoMidia === "video"
-                ? { video: buffer, caption: texto || undefined }
-                : { image: buffer, caption: texto || undefined };
-            await sock.sendMessage(jid, payloadMidia);
-        } else {
-            await sock.sendMessage(jid, { text: texto });
+export async function enviarMensagemDireta(
+    destino,
+    { texto = "", midiaUrl = "", tipoMidia = "imagem" } = {},
+    contexto = {},
+    tenantId = obterTenantAtual()
+) {
+    const tid = normalizarTenantId(tenantId);
+    return executarNoTenant(tid, async () => {
+        const st = obterEstado(tid);
+        const sock = st.sockAtual;
+        if (!sock || !st.whatsappConectado) {
+            throw new Error("WhatsApp não conectado.");
         }
 
-        registrarHistorico({
-            data: new Date().toISOString(),
-            horario: contexto.horario || null,
-            origem: contexto.origem || "webhook",
-            grupo: contexto.nomeDestino || String(destino),
-            sucesso: true,
-            erro: null
-        });
+        const jid = await resolverJidDestino(sock, destino);
 
-        return { ok: true, jid };
-    } catch (err) {
-        registrarHistorico({
-            data: new Date().toISOString(),
-            horario: contexto.horario || null,
-            origem: contexto.origem || "webhook",
-            grupo: contexto.nomeDestino || String(destino),
-            sucesso: false,
-            erro: err.message
-        });
-        throw err;
-    }
+        try {
+            if (midiaUrl) {
+                const buffer = await carregarBufferMidia({ caminho: midiaUrl, urlPublica: midiaUrl });
+                const payloadMidia = tipoMidia === "video"
+                    ? { video: buffer, caption: texto || undefined }
+                    : { image: buffer, caption: texto || undefined };
+                await sock.sendMessage(jid, payloadMidia);
+            } else {
+                await sock.sendMessage(jid, { text: texto });
+            }
+
+            registrarHistorico({
+                data: new Date().toISOString(),
+                horario: contexto.horario || null,
+                origem: contexto.origem || "webhook",
+                grupo: contexto.nomeDestino || String(destino),
+                sucesso: true,
+                erro: null
+            });
+
+            return { ok: true, jid };
+        } catch (err) {
+            registrarHistorico({
+                data: new Date().toISOString(),
+                horario: contexto.horario || null,
+                origem: contexto.origem || "webhook",
+                grupo: contexto.nomeDestino || String(destino),
+                sucesso: false,
+                erro: err.message
+            });
+            throw err;
+        }
+    });
 }

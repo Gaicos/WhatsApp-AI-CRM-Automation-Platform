@@ -4,10 +4,15 @@ import { BufferJSON, initAuthCreds, proto } from "@itsliaaa/baileys";
 import { obterClienteSupabase } from "./supabaseService.js";
 
 const TAMANHO_LOTE = 100;
-let limparCacheAtivo = null;
+const cachesPorPrefixo = new Map();
 
 function normalizarNomeChave(chave) {
   return String(chave || "").replace(/\//g, "__").replace(/:/g, "-");
+}
+
+function prefixarChave(chave, prefixo = "") {
+  const limpa = normalizarNomeChave(chave);
+  return prefixo ? `${prefixo}${limpa}` : limpa;
 }
 
 function desserializarValor(valor) {
@@ -20,19 +25,19 @@ function desserializarValor(valor) {
 
 /**
  * Implementa o contrato completo de autenticacao do Baileys diretamente na
- * tabela public.whatsapp_auth_state do Supabase, com cache em memoria e lotes.
+ * tabela public.whatsapp_auth_state do Supabase, com cache isolado por tenant (prefixo).
  */
-export async function useSupabaseAuthState(supabaseOverride = null) {
+export async function useSupabaseAuthState(supabaseOverride = null, prefixo = "") {
   const supabase = supabaseOverride || obterClienteSupabase();
   if (!supabase) {
     throw new Error("Supabase não está configurado para usar auth na nuvem.");
   }
 
   const cache = new Map();
-  limparCacheAtivo = () => cache.clear();
+  cachesPorPrefixo.set(prefixo, () => cache.clear());
 
-  async function lerChavesEmLote(chavesBrutas) {
-    const chaves = [...new Set(chavesBrutas.map(normalizarNomeChave).filter(Boolean))];
+  async function lerChavesEmLote(chavesComPrefixo) {
+    const chaves = [...new Set(chavesComPrefixo.filter(Boolean))];
     const faltantes = chaves.filter((k) => !cache.has(k));
 
     for (let i = 0; i < faltantes.length; i += TAMANHO_LOTE) {
@@ -48,9 +53,8 @@ export async function useSupabaseAuthState(supabaseOverride = null) {
 
       const encontrados = new Set();
       for (const item of data || []) {
-        const chaveLimpa = normalizarNomeChave(item.chave);
-        encontrados.add(chaveLimpa);
-        cache.set(chaveLimpa, desserializarValor(item.valor));
+        encontrados.add(item.chave);
+        cache.set(item.chave, desserializarValor(item.valor));
       }
       for (const k of lote) {
         if (!encontrados.has(k)) {
@@ -60,16 +64,17 @@ export async function useSupabaseAuthState(supabaseOverride = null) {
     }
   }
 
+  const chaveCreds = prefixarChave("creds.json", prefixo);
+
   async function escreverCredenciais(dadosCreds) {
-    const chave = "creds.json";
     const agoraIso = new Date().toISOString();
-    cache.set(chave, dadosCreds);
+    cache.set(chaveCreds, dadosCreds);
 
     const { error } = await supabase
       .from("whatsapp_auth_state")
       .upsert(
         {
-          chave,
+          chave: chaveCreds,
           valor: { raw: JSON.stringify(dadosCreds, BufferJSON.replacer) },
           atualizado_em: agoraIso
         },
@@ -81,11 +86,11 @@ export async function useSupabaseAuthState(supabaseOverride = null) {
     }
   }
 
-  await lerChavesEmLote(["creds.json"]);
-  const credsExistentes = cache.get("creds.json");
+  await lerChavesEmLote([chaveCreds]);
+  const credsExistentes = cache.get(chaveCreds);
   const creds = credsExistentes || initAuthCreds();
   if (!credsExistentes) {
-    cache.set("creds.json", creds);
+    cache.set(chaveCreds, creds);
   }
 
   return {
@@ -95,11 +100,11 @@ export async function useSupabaseAuthState(supabaseOverride = null) {
         get: async (type, ids) => {
           const data = {};
           const listaIds = Array.isArray(ids) ? ids : [];
-          const chaves = listaIds.map((id) => normalizarNomeChave(`${type}-${id}.json`));
+          const chaves = listaIds.map((id) => prefixarChave(`${type}-${id}.json`, prefixo));
           await lerChavesEmLote(chaves);
 
           for (const id of listaIds) {
-            const chave = normalizarNomeChave(`${type}-${id}.json`);
+            const chave = prefixarChave(`${type}-${id}.json`, prefixo);
             let value = cache.get(chave) ?? null;
             if (type === "app-state-sync-key" && value) {
               value = proto.Message.AppStateSyncKeyData.fromObject(value);
@@ -116,7 +121,7 @@ export async function useSupabaseAuthState(supabaseOverride = null) {
           for (const category in data || {}) {
             for (const id in data[category]) {
               const value = data[category][id];
-              const chave = normalizarNomeChave(`${category}-${id}.json`);
+              const chave = prefixarChave(`${category}-${id}.json`, prefixo);
               if (value) {
                 cache.set(chave, value);
                 paraUpsert.push({
@@ -159,9 +164,25 @@ export async function useSupabaseAuthState(supabaseOverride = null) {
   };
 }
 
+export async function tenantTemCredsNoSupabase(prefixo = "") {
+  const supabase = obterClienteSupabase();
+  if (!supabase) return false;
+  try {
+    const chaveCreds = prefixarChave("creds.json", prefixo);
+    const { data, error } = await supabase
+      .from("whatsapp_auth_state")
+      .select("chave")
+      .eq("chave", chaveCreds)
+      .limit(1);
+    return !error && Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // Sincroniza a sessão do WhatsApp (auth_info) entre o disco local e a tabela
 // public.whatsapp_auth_state no Supabase, permitindo rodar 24h na nuvem sem perder o QR Code.
-export async function restaurarAuthWhatsappDoSupabase(pastaLocal = "auth_info") {
+export async function restaurarAuthWhatsappDoSupabase(pastaLocal = "auth_info", prefixo = "") {
   const supabase = obterClienteSupabase();
   if (!supabase) return false;
 
@@ -171,9 +192,13 @@ export async function restaurarAuthWhatsappDoSupabase(pastaLocal = "auth_info") 
   }
 
   try {
-    const { data, error } = await supabase
-      .from("whatsapp_auth_state")
-      .select("chave, valor");
+    let query = supabase.from("whatsapp_auth_state").select("chave, valor");
+    if (prefixo) {
+      query = query.like("chave", `${prefixo}%`);
+    } else {
+      query = query.not("chave", "like", "tenant:%");
+    }
+    const { data, error } = await query;
 
     if (error || !Array.isArray(data) || data.length === 0) {
       return false;
@@ -182,7 +207,10 @@ export async function restaurarAuthWhatsappDoSupabase(pastaLocal = "auth_info") 
     fs.mkdirSync(pastaLocal, { recursive: true });
     for (const item of data) {
       if (!item.chave || !item.valor) continue;
-      const nomeSeguro = path.basename(item.chave);
+      const semPrefixo = prefixo && item.chave.startsWith(prefixo)
+        ? item.chave.slice(prefixo.length)
+        : item.chave;
+      const nomeSeguro = path.basename(semPrefixo);
       const conteudo = typeof item.valor.raw === "string"
         ? item.valor.raw
         : JSON.stringify(JSON.parse(JSON.stringify(item.valor), BufferJSON.reviver));
@@ -195,7 +223,7 @@ export async function restaurarAuthWhatsappDoSupabase(pastaLocal = "auth_info") 
   }
 }
 
-export async function salvarCredsWhatsappNoSupabase(pastaLocal = "auth_info") {
+export async function salvarCredsWhatsappNoSupabase(pastaLocal = "auth_info", prefixo = "") {
   const supabase = obterClienteSupabase();
   if (!supabase) return;
 
@@ -208,7 +236,7 @@ export async function salvarCredsWhatsappNoSupabase(pastaLocal = "auth_info") {
       .from("whatsapp_auth_state")
       .upsert(
         {
-          chave: "creds.json",
+          chave: prefixarChave("creds.json", prefixo),
           valor: { raw },
           atualizado_em: new Date().toISOString()
         },
@@ -217,13 +245,18 @@ export async function salvarCredsWhatsappNoSupabase(pastaLocal = "auth_info") {
   } catch {}
 }
 
-export async function limparAuthWhatsappNoSupabase() {
-  if (typeof limparCacheAtivo === "function") {
-    limparCacheAtivo();
+export async function limparAuthWhatsappNoSupabase(prefixo = "") {
+  const limparCache = cachesPorPrefixo.get(prefixo);
+  if (typeof limparCache === "function") {
+    limparCache();
   }
   const supabase = obterClienteSupabase();
   if (!supabase) return;
   try {
-    await supabase.from("whatsapp_auth_state").delete().neq("chave", "");
+    if (prefixo) {
+      await supabase.from("whatsapp_auth_state").delete().like("chave", `${prefixo}%`);
+    } else {
+      await supabase.from("whatsapp_auth_state").delete().not("chave", "like", "tenant:%");
+    }
   } catch {}
 }
