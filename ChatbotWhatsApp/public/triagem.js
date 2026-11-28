@@ -86,6 +86,10 @@ async function carregarTriagem() {
   $("iaProvedor").value = ia.provedor || "local";
   $("iaModelo").value = ia.modelo || MODELOS_PADRAO[ia.provedor] || "";
   $("iaApiKey").value = ia.apiKey || "";
+  if ($("iaNomeBot")) $("iaNomeBot").value = ia.nomeBot || "";
+  if ($("iaNomeResponsavel")) $("iaNomeResponsavel").value = ia.nomeResponsavel || "";
+  if ($("iaTelefoneAlerta")) $("iaTelefoneAlerta").value = ia.telefoneAlertaHumano || "";
+  if ($("iaMinutosSemInteracao")) $("iaMinutosSemInteracao").value = ia.minutosSemInteracaoAlerta ?? 10;
   $("iaConhecimentoExtra").value = ia.conhecimentoExtra || "";
   $("iaConhecimentoSite").value = ia.conhecimentoSite || "";
   $("iaPromptSistema").value = ia.promptSistema || "";
@@ -93,7 +97,9 @@ async function carregarTriagem() {
   $("iaHorasPausa").value = ia.horasPausaHumano || 24;
   $("iaPausarManual").checked = !!ia.pausarAoResponderManual;
   $("iaAvisarGrupo").checked = ia.avisarGrupoControle !== false;
-  $("statusSincronizacaoSite").textContent = formatarDataHora(ia.ultimaSincronizacao);
+  const qtdProdutos = Array.isArray(ia.catalogoProdutos) ? ia.catalogoProdutos.length : 0;
+  $("statusSincronizacaoSite").textContent = formatarDataHora(ia.ultimaSincronizacao)
+    + (qtdProdutos > 0 ? ` · ${qtdProdutos} produto(s) no catálogo` : "");
 
   atualizarVisibilidadeProvedor();
   atualizarTriagem();
@@ -142,12 +148,17 @@ function renderizarPergunta(node) {
 function coletarConfigIaDaTela() {
   return {
     ativa: $("iaAtiva").checked,
-    urlSite: $("iaUrlSite").value.trim() || "https://www.gaicos-store.com.br/",
+    urlSite: $("iaUrlSite").value.trim(),
     provedor: $("iaProvedor").value || "local",
     modelo: $("iaModelo").value.trim(),
     apiKey: $("iaApiKey").value.trim(),
+    nomeBot: $("iaNomeBot")?.value.trim() || undefined,
+    nomeResponsavel: $("iaNomeResponsavel")?.value.trim() || undefined,
+    telefoneAlertaHumano: $("iaTelefoneAlerta")?.value.trim() || "",
+    minutosSemInteracaoAlerta: Number($("iaMinutosSemInteracao")?.value ?? 10),
     conhecimentoExtra: $("iaConhecimentoExtra").value,
     conhecimentoSite: $("iaConhecimentoSite").value,
+    catalogoProdutos: fluxoTriagem.ia?.catalogoProdutos || [],
     ultimaSincronizacao: fluxoTriagem.ia?.ultimaSincronizacao || null,
     promptSistema: $("iaPromptSistema").value,
     mensagemTransferenciaHumano: $("iaMensagemHumano").value,
@@ -204,9 +215,12 @@ $("btnSincronizarSite").addEventListener("click", async () => {
     }
     $("iaConhecimentoSite").value = dados.conhecimentoSite || "";
     fluxoTriagem.ia = fluxoTriagem.ia || {};
+    fluxoTriagem.ia.catalogoProdutos = Array.isArray(dados.produtos) ? dados.produtos : [];
     fluxoTriagem.ia.ultimaSincronizacao = dados.ultimaSincronizacao;
+    const resumoProdutos = dados.totalProdutos ? ` · ${dados.totalProdutos} produto(s)` : "";
+    const resumoFaq = dados.totalFaqs ? ` · ${dados.totalFaqs} FAQ(s)` : "";
     $("statusSincronizacaoSite").textContent =
-      `${formatarDataHora(dados.ultimaSincronizacao)} (${(dados.paginasLidas || []).length} página(s) verificada(s))`;
+      `${formatarDataHora(dados.ultimaSincronizacao)}${resumoProdutos}${resumoFaq}`;
     mostrarToast("Conteúdo do site atualizado com sucesso! ✅", "ok");
   } catch (err) {
     mostrarToast("Erro ao ler o site: " + err.message, "erro");
@@ -250,11 +264,11 @@ async function executarSimulacao() {
       return;
     }
     const badgeAtendente = dados.chamarAtendente
-      ? "\n\n🔔 [AÇÃO: Pausou o robô para este cliente e avisou o Atendente Humano!]"
+      ? `\n\n🔔 [AÇÃO: Pausou o robô para este cliente e chamou ${$("iaNomeResponsavel")?.value.trim() || "o Gaicos"} em pessoa! Motivo: ${dados.motivoEscalacao || "Atenção humana"}]`
       : "";
     const etiquetaOrigem = dados.origem === "aprendizado-treinado"
       ? "🧠 Resposta que você ensinou"
-      : `🤖 Resposta do Bot (${dados.origem || "ia"})`;
+      : `🤖 Gaicos Jr (${dados.origem || "ia"})`;
 
     box.textContent = `${etiquetaOrigem}:\n\n${dados.resposta}${badgeAtendente}`;
     $("inputCorrigirSimulacao").value = dados.resposta || "";

@@ -150,86 +150,19 @@
 
         <section id="abaTriagem" class="aba oculto">
             <div class="cartao-status">
-                <div class="cartao-status-linha">
+                <div class="cartao-status-linha" style="margin-bottom:14px;">
                     <div>
                         <label class="check-ativo" style="font-size:1.05em; font-weight:700;">
-                            <input type="checkbox" id="triagemAtivo"> Ativar atendimento automático no WhatsApp
+                            <input type="checkbox" id="triagemAtivo"> Ativar Gaicos Jr (Vendedor IA no WhatsApp)
                         </label>
                         <p class="texto-ajuda" style="margin:6px 0 0 0;">
-                            Respostas curtas, dinâmicas e naturais baseadas no <strong>site da sua loja</strong> e no seu treinamento contínuo.
+                            Lê os produtos e preços do seu site, responde em poucas palavras com persuasão e chama o <strong>Gaicos em pessoa</strong> no WhatsApp se houver dúvida ou falta de interação.
                         </p>
                     </div>
                     <button type="button" id="triagemSalvar" class="botao-primario">Salvar configuração</button>
                 </div>
-            </div>
 
-            <div class="cartao-status">
-                <h3>Simulador & Treinamento Rápido</h3>
-                <p class="texto-ajuda" style="margin-top:0;">
-                    Teste uma pergunta abaixo. Se quiser que o bot responda de um jeito mais curto ou diferente, basta ajustar a resposta logo abaixo e clicar em <strong>Ensinar ao Bot</strong>.
-                </p>
-                <div class="linha-acoes">
-                    <input type="text" id="inputSimularPergunta" placeholder="Ex: Oi, quanto custa pra fazer um playmat personalizado?" style="margin:0; flex:1;">
-                    <button type="button" id="btnSimularPergunta" class="botao-alerta">Testar Resposta</button>
-                </div>
-
-                <div id="resultadoSimulacao" class="caixa-simulacao oculto"></div>
-
-                <div id="blocoCorrigirSimulacao" class="caixa-corrigir oculto">
-                    <label class="rotulo" style="color:var(--verde-brilho);">Quer adequar essa resposta? Edite abaixo como o bot DEVE responder essa pergunta:</label>
-                    <textarea id="inputCorrigirSimulacao" rows="3" maxlength="2000" style="margin:8px 0;"></textarea>
-                    <button type="button" id="btnEnsinarDaSimulacao" class="botao-primario">Ensinar ao Bot (Salvar no Aprendizado)</button>
-                </div>
-            </div>
-
-            <div class="cartao-status">
-                <h3>Aprendizado Contínuo do Bot (Treinar Respostas)</h3>
-                <p class="texto-ajuda" style="margin-top:0;">
-                    Aqui você vai moldando o bot ao seu gosto: toda vez que você ensina uma resposta, ele passa a responder perguntas iguais ou parecidas exatamente do seu jeito.
-                </p>
-
-                <div class="bloco-treino">
-                    <input type="hidden" id="treinoId">
-                    <label class="rotulo">Quando o cliente perguntar algo parecido com: <small style="font-weight:400;">(dica: pode separar variações com <code>|</code>)</small></label>
-                    <input type="text" id="treinoPergunta" placeholder="Ex: tem desconto no pix | faz mais barato | tem cupom" style="margin:6px 0 10px 0;">
-
-                    <label class="rotulo">O bot deve responder exatamente assim (curto e direto):</label>
-                    <textarea id="treinoResposta" rows="3" maxlength="2000" placeholder="Ex: No Pix já está com nosso melhor valor promocional direto no site! Qual modelo você curtiu?" style="margin:6px 0 10px 0;"></textarea>
-
-                    <div class="linha-acoes" style="margin:0;">
-                        <button type="button" id="btnSalvarTreino" class="botao-primario">Ensinar Resposta ao Bot</button>
-                        <button type="button" id="btnCancelarTreino" class="botao-secundario oculto">Cancelar edição</button>
-                    </div>
-                </div>
-
-                <details class="accordion" open>
-                    <summary>Respostas que o Bot já Aprendeu com Você <span id="contadorExemplosTreinados" class="contador-pill">0</span></summary>
-                    <div class="conteudo-accordion">
-                        <div id="listaExemplosTreinados" class="tabela-wrapper" style="border:none;"></div>
-                    </div>
-                </details>
-
-                <details class="accordion">
-                    <summary>Últimas Perguntas dos Clientes (Clique em "Adequar" para ensinar) <span id="contadorInteracoesRecentes" class="contador-pill">0</span></summary>
-                    <div class="conteudo-accordion">
-                        <div class="linha-acoes" style="justify-content:flex-end; margin-top:0;">
-                            <button type="button" id="btnAtualizarAprendizado" class="botao-secundario">Atualizar lista</button>
-                            <button type="button" id="btnLimparInteracoes" class="botao-perigo">Limpar histórico recente</button>
-                        </div>
-                        <div id="listaInteracoesRecentes" class="tabela-wrapper" style="border:none;"></div>
-                    </div>
-                </details>
-            </div>
-
-            <div class="cartao-status">
-                <h3>Site da Loja & Inteligência Artificial</h3>
-                <div class="linha-acoes">
-                    <label class="check-ativo">
-                        <input type="checkbox" id="iaAtiva" checked> Conversar livremente com IA baseada no site + informações exclusivas
-                    </label>
-                </div>
-
-                <label class="rotulo">URL do seu site</label>
+                <label class="rotulo">Site da Loja (leitura automática de produtos, promoções e FAQ)</label>
                 <div class="linha-acoes" style="margin-top:4px;">
                     <input type="url" id="iaUrlSite" placeholder="https://www.gaicos-store.com.br/" style="margin:0; flex:1;">
                     <button type="button" id="btnSincronizarSite" class="botao-secundario">Ler / Atualizar Site Agora</button>
@@ -238,7 +171,19 @@
 
                 <div class="grid-campos" style="margin-top:12px;">
                     <div>
-                        <label class="rotulo">Motor de Inteligência Artificial</label>
+                        <label class="rotulo" for="iaTelefoneAlerta">WhatsApp para receber alertas (Gaicos em pessoa)</label>
+                        <input type="text" id="iaTelefoneAlerta" placeholder="5511999999999">
+                    </div>
+                    <div>
+                        <label class="rotulo" for="iaMinutosSemInteracao">Alertar falta de interação após (min)</label>
+                        <input type="number" id="iaMinutosSemInteracao" min="0" max="1440" value="10">
+                    </div>
+                    <div>
+                        <label class="rotulo" for="iaHorasPausa">Pausar robô após chamar humano (h)</label>
+                        <input type="number" id="iaHorasPausa" min="1" max="8760" value="24">
+                    </div>
+                    <div>
+                        <label class="rotulo" for="iaProvedor">Motor de Inteligência Artificial</label>
                         <select id="iaProvedor">
                             <option value="local">Modo Inteligente Local (Sem Chave - Gratuito)</option>
                             <option value="gemini">Google Gemini (Recomendado - API Gratuita)</option>
@@ -247,91 +192,133 @@
                         </select>
                     </div>
                     <div id="blocoModeloIa">
-                        <label class="rotulo">Modelo da IA</label>
+                        <label class="rotulo" for="iaModelo">Modelo da IA</label>
                         <input type="text" id="iaModelo" placeholder="Ex: gemini-2.5-flash">
                     </div>
                 </div>
 
                 <div id="blocoChaveIa">
-                    <label class="rotulo">Chave da API (API Key)</label>
+                    <label class="rotulo" for="iaApiKey">Chave da API (API Key)</label>
                     <input type="password" id="iaApiKey" placeholder="Cole aqui sua chave da API (Gemini, Groq ou OpenAI)">
                     <p id="dicaProvedorIa" class="texto-ajuda" style="margin-top:-8px;"></p>
                 </div>
 
-                <label class="rotulo">Informações Exclusivas da Loja (Segredos, Prazos Internos, Regras)</label>
-                <p class="texto-ajuda" style="margin:2px 0 6px 0;">
-                    Escreva aqui tudo o que <strong>não está no site</strong> mas que você quer que o bot saiba (ex: espessura do playmat em mm, borda costurada, prazo de produção em dias úteis). <em>Nunca é apagado ao sincronizar o site.</em>
-                </p>
-                <textarea id="iaConhecimentoExtra" rows="5" maxlength="25000" placeholder="Ex: Nossos playmats têm 3mm de espessura, borda costurada reforçada e levam de 3 a 5 dias úteis para produção..."></textarea>
-
-                <details class="accordion" style="margin-top:8px;">
-                    <summary>Base de Conhecimento Lida do Site (Produtos, Preços e Links)</summary>
-                    <div class="conteudo-accordion">
-                        <textarea id="iaConhecimentoSite" rows="8" maxlength="40000" placeholder="Conteúdo lido do site..."></textarea>
-                    </div>
-                </details>
-
-                <details class="accordion" style="margin-top:8px;">
-                    <summary>Instruções e Personalidade do Atendente IA (Prompt do Sistema)</summary>
-                    <div class="conteudo-accordion">
-                        <textarea id="iaPromptSistema" rows="6" maxlength="10000"></textarea>
-                    </div>
-                </details>
+                <div class="linha-acoes" style="margin-bottom:4px;">
+                    <label class="check-ativo">
+                        <input type="checkbox" id="iaAtiva" checked> Atendimento livre por IA (Vendedor)
+                    </label>
+                    <label class="check-ativo">
+                        <input type="checkbox" id="iaPausarManual"> Pausar bot se eu responder pelo celular
+                    </label>
+                    <label class="check-ativo">
+                        <input type="checkbox" id="iaAvisarGrupo" checked> Avisar também no Grupo de Controle
+                    </label>
+                </div>
             </div>
 
             <div class="cartao-status">
-                <h3>Opção de Falar com Atendente Humano</h3>
+                <h3>Simulador do Gaicos Jr (Testar Venda & Escalação)</h3>
                 <p class="texto-ajuda" style="margin-top:0;">
-                    Quando o cliente pede para falar com um atendente (ou digita <code>atendente</code>), o bot envia a mensagem abaixo, pausa as respostas automáticas para aquele cliente e avisa você no Grupo de Controle.
+                    Teste uma pergunta do cliente abaixo antes de colocar no ar. Se quiser ajustar alguma resposta, edite logo abaixo e salve no aprendizado.
                 </p>
-
-                <label class="rotulo">Mensagem enviada ao cliente ao chamar um atendente humano</label>
-                <textarea id="iaMensagemHumano" rows="2" maxlength="2000"></textarea>
-
                 <div class="linha-acoes">
-                    <label class="rotulo" style="margin:0;">Pausar o robô para esse cliente por (horas):</label>
-                    <input type="number" id="iaHorasPausa" min="1" max="8760" value="24" style="width:100px; margin:0;">
+                    <input type="text" id="inputSimularPergunta" placeholder="Ex: Quanto custa um playmat personalizado?" style="margin:0; flex:1;">
+                    <button type="button" id="btnSimularPergunta" class="botao-alerta">Testar Resposta</button>
                 </div>
 
-                <div class="linha-acoes">
-                    <label class="check-ativo">
-                        <input type="checkbox" id="iaPausarManual"> Pausar o robô automaticamente se eu responder o cliente pelo celular / WhatsApp Web (dica: você também pode enviar <code>#pausar</code> ou <code>#bot</code> no chat)
-                    </label>
-                </div>
+                <div id="resultadoSimulacao" class="caixa-simulacao oculto"></div>
 
-                <div class="linha-acoes">
-                    <label class="check-ativo">
-                        <input type="checkbox" id="iaAvisarGrupo" checked> Enviar alerta no Grupo de Controle com link direto do WhatsApp do cliente
-                    </label>
-                </div>
-
-                <div class="divisor-secao">
-                    <div class="cartao-status-linha">
-                        <strong>Clientes em Atendimento Humano (Robô Pausado)</strong>
-                        <div class="botoes-controle">
-                            <button type="button" id="btnAtualizarPausas" class="botao-secundario">Atualizar</button>
-                            <button type="button" id="btnReativarTodos" class="botao-perigo">Reativar robô para todos</button>
-                        </div>
-                    </div>
-                    <div id="listaPausasHumano" class="tabela-wrapper" style="border:none; margin-top:10px;"></div>
+                <div id="blocoCorrigirSimulacao" class="caixa-corrigir oculto">
+                    <label class="rotulo" style="color:var(--verde-brilho);">Quer adequar essa resposta? Edite abaixo como o bot DEVE responder:</label>
+                    <textarea id="inputCorrigirSimulacao" rows="3" maxlength="2000" style="margin:8px 0;"></textarea>
+                    <button type="button" id="btnEnsinarDaSimulacao" class="botao-primario">Ensinar ao Bot (Salvar no Aprendizado)</button>
                 </div>
             </div>
 
             <details class="painel-grupos">
-                <summary>Menu de opções numeradas (Opcional — funciona em conjunto com a IA)</summary>
+                <summary>Configurações avançadas & treinamento manual (opcional)</summary>
                 <div class="conteudo-painel">
-                    <p class="texto-ajuda">
-                        Se quiser exibir também um menu numerado (1, 2, 3...) quando o cliente mandar "Oi", configure abaixo. Caso deixe sem pergunta inicial, o bot conversará 100% de forma livre com a IA do site.
-                    </p>
-                    <label class="rotulo">Mensagem de boas-vindas do menu</label>
-                    <textarea id="triagemBoasVindas" rows="2" maxlength="4000"></textarea>
-                    <label class="rotulo">Pergunta inicial do menu</label>
-                    <select id="triagemInicial"></select>
-
-                    <div class="linha-acoes">
-                        <button type="button" id="triagemNovaPergunta" class="botao-primario">+ Nova pergunta</button>
+                    <div class="grid-campos" style="margin-top:8px;">
+                        <div>
+                            <label class="rotulo" for="iaNomeBot">Nome do assistente virtual</label>
+                            <input type="text" id="iaNomeBot" placeholder="Gaicos Jr">
+                        </div>
+                        <div>
+                            <label class="rotulo" for="iaNomeResponsavel">Nome do responsável (atendente em pessoa)</label>
+                            <input type="text" id="iaNomeResponsavel" placeholder="Gaicos">
+                        </div>
                     </div>
-                    <div id="triagemLista"></div>
+
+                    <label class="rotulo">Mensagem enviada ao cliente ao chamar o responsável</label>
+                    <textarea id="iaMensagemHumano" rows="2" maxlength="2000"></textarea>
+
+                    <label class="rotulo">Informações Exclusivas da Loja (Regras, Espessura, Prazos Internos)</label>
+                    <textarea id="iaConhecimentoExtra" rows="4" maxlength="25000" placeholder="Detalhes que não estão no site..."></textarea>
+
+                    <details class="accordion" style="margin-top:8px;">
+                        <summary>Base de Conhecimento Lida do Site (Produtos, Preços e Links)</summary>
+                        <div class="conteudo-accordion">
+                            <textarea id="iaConhecimentoSite" rows="8" maxlength="40000" placeholder="Conteúdo lido do site..."></textarea>
+                        </div>
+                    </details>
+
+                    <details class="accordion">
+                        <summary>Personalidade / Prompt do Sistema</summary>
+                        <div class="conteudo-accordion">
+                            <textarea id="iaPromptSistema" rows="6" maxlength="10000"></textarea>
+                        </div>
+                    </details>
+
+                    <details class="accordion">
+                        <summary>Clientes em Atendimento Humano (Bot Pausado)</summary>
+                        <div class="conteudo-accordion">
+                            <div class="botoes-controle" style="margin-bottom:8px;">
+                                <button type="button" id="btnAtualizarPausas" class="botao-secundario">Atualizar</button>
+                                <button type="button" id="btnReativarTodos" class="botao-perigo">Reativar robô para todos</button>
+                            </div>
+                            <div id="listaPausasHumano" class="tabela-wrapper" style="border:none;"></div>
+                        </div>
+                    </details>
+
+                    <details class="accordion">
+                        <summary>Treinar Respostas Manuais & Histórico Recente <span id="contadorExemplosTreinados" class="contador-pill">0</span></summary>
+                        <div class="conteudo-accordion">
+                            <div class="bloco-treino">
+                                <input type="hidden" id="treinoId">
+                                <label class="rotulo">Quando o cliente perguntar algo parecido com: <small style="font-weight:400;">(separe variações com <code>|</code>)</small></label>
+                                <input type="text" id="treinoPergunta" placeholder="Ex: tem desconto no pix | faz mais barato" style="margin:6px 0 10px 0;">
+                                <label class="rotulo">O bot deve responder exatamente assim:</label>
+                                <textarea id="treinoResposta" rows="3" maxlength="2000" style="margin:6px 0 10px 0;"></textarea>
+                                <div class="linha-acoes" style="margin:0;">
+                                    <button type="button" id="btnSalvarTreino" class="botao-primario">Ensinar Resposta ao Bot</button>
+                                    <button type="button" id="btnCancelarTreino" class="botao-secundario oculto">Cancelar edição</button>
+                                </div>
+                            </div>
+                            <div id="listaExemplosTreinados" class="tabela-wrapper" style="border:none; margin-bottom:12px;"></div>
+                            <div class="linha-acoes" style="justify-content:space-between;">
+                                <strong>Últimas Perguntas <span id="contadorInteracoesRecentes" class="contador-pill">0</span></strong>
+                                <div class="botoes-controle">
+                                    <button type="button" id="btnAtualizarAprendizado" class="botao-secundario">Atualizar</button>
+                                    <button type="button" id="btnLimparInteracoes" class="botao-perigo">Limpar</button>
+                                </div>
+                            </div>
+                            <div id="listaInteracoesRecentes" class="tabela-wrapper" style="border:none;"></div>
+                        </div>
+                    </details>
+
+                    <details class="accordion">
+                        <summary>Menu de opções numeradas (Opcional)</summary>
+                        <div class="conteudo-accordion">
+                            <label class="rotulo">Mensagem de boas-vindas do menu</label>
+                            <textarea id="triagemBoasVindas" rows="2" maxlength="4000"></textarea>
+                            <label class="rotulo">Pergunta inicial do menu</label>
+                            <select id="triagemInicial"></select>
+                            <div class="linha-acoes">
+                                <button type="button" id="triagemNovaPergunta" class="botao-primario">+ Nova pergunta</button>
+                            </div>
+                            <div id="triagemLista"></div>
+                        </div>
+                    </details>
                 </div>
             </details>
         </section>

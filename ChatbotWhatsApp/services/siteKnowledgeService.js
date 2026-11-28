@@ -1,44 +1,190 @@
-// Serviço responsável por ler as páginas do site (ex: https://www.gaicos-store.com.br/)
-// e organizar as informações para o atendimento inteligente no WhatsApp.
+// Serviço responsável por ler as páginas, catálogos JSON e FAQs de sites (SPA, Shopify, WooCommerce ou HTML)
+// e organizar as informações em formato compacto para o atendimento no WhatsApp.
 
 export const CONHECIMENTO_PADRAO_GAICOS = `=== INFORMAÇÕES OFICIAIS DA LOJA: GAICOS STORE ===
 Site Oficial: https://www.gaicos-store.com.br/
-Catálogo de Produtos: https://www.gaicos-store.com.br/produtos
-Seção de Playmats: https://www.gaicos-store.com.br/playmats
-Criar Playmat Personalizado (enviar própria arte): https://www.gaicos-store.com.br/criar-playmat
+Catálogo de Produtos: https://www.gaicos-store.com.br/catalogo
+Playmats e Produtos: https://www.gaicos-store.com.br/produtos
+Criar Playmat Personalizado (enviar própria arte): https://www.gaicos-store.com.br/pedido-personalizado
+Perguntas Frequentes (FAQ): https://www.gaicos-store.com.br/conta/faq
 
 SOBRE A LOJA:
-A Gaicos Store é uma loja virtual brasileira especializada em artigos, tapetes de jogo (playmats) e acessórios para TCG (Trading Card Games / Jogos de Cartas Colecionáveis), atendendo jogadores de:
-- Yu-Gi-Oh!
-- Magic: The Gathering (MTG)
-- Pokémon TCG
-- Outros Card Games
+A Gaicos Store é uma loja brasileira especializada em playmats (tapetes de jogo) e acessórios para TCG (Yu-Gi-Oh!, Magic: The Gathering, Pokémon TCG e outros card games), com tecido liso que protege os sleeves, impressão nítida em cores vibrantes e base emborrachada antiderrapante.
 
-PRINCIPAIS PRODUTOS E PREÇOS DE REFERÊNCIA:
-1. Playmat Personalizado (Crie com sua própria arte):
-   - Link direto para criar no site: https://www.gaicos-store.com.br/criar-playmat
-   - Como funciona: O cliente acessa a ferramenta interativa no site, envia sua própria imagem/arte, ajusta o visual e faz o pedido sob demanda. Acabamento em tecido de alta qualidade com base emborrachada antiderrapante.
-   - Playmat Personalizado Tamanho M: a partir de R$ 178,00.
-   - Playmat Personalizado Tamanho G (ex: 75x35 cm): a partir de R$ 198,00.
+TAMANHOS E VALORES DE REFERÊNCIA:
+- Playmat Personalizado Tamanho M (60x35cm): R$ 178,00 (https://www.gaicos-store.com.br/pedido-personalizado)
+- Playmat Personalizado Tamanho G (75x35cm): R$ 198,00 (https://www.gaicos-store.com.br/pedido-personalizado)
+- Playmats Temáticos e Coleções Exclusivas (Yu-Gi-Oh!, Magic, Pokémon): a partir de R$ 175,00 em promoções ou R$ 199,00 (https://www.gaicos-store.com.br/produtos)
 
-2. Playmats Temáticos e Coleções Exclusivas:
-   - Link direto: https://www.gaicos-store.com.br/playmats e https://www.gaicos-store.com.br/produtos
-   - Modelos exclusivos para Yu-Gi-Oh!, Magic: The Gathering e Pokémon TCG.
-   - Edições especiais de criadores de conteúdo parceiros (como Getulino Edition, Duel Comic TCG, Irmãos Paradox, Playmaker BR).
-   - Valores: variações a partir de R$ 199,00 (consultar o modelo desejado no catálogo do site).
+PAGAMENTO, FRETE E GARANTIA:
+- Pix com aprovação imediata (QR Code e Copia e Cola gerados na hora no checkout) e cartão.
+- Frete e prazo calculados direto pelo CEP no carrinho em https://www.gaicos-store.com.br/.
+- Troca/devolução garantida entrando em contato pelos canais oficiais informando o número do pedido.`;
 
-3. Acessórios para TCG:
-   - Artigos voltados para melhorar a proteção, organização e experiência de jogo em partidas e torneios de card games.
-   - Disponíveis em: https://www.gaicos-store.com.br/produtos
+export function formatarPrecoReal(valorEmCentavosOuReais, { emCentavos = true } = {}) {
+  if (valorEmCentavosOuReais === null || valorEmCentavosOuReais === undefined || valorEmCentavosOuReais === "") {
+    return "";
+  }
+  const numero = Number(String(valorEmCentavosOuReais).replace(",", "."));
+  if (!Number.isFinite(numero) || numero <= 0) return "";
+  const reais = emCentavos ? numero / 100 : numero;
+  return `R$ ${reais.toFixed(2).replace(".", ",")}`;
+}
 
-FORMAS DE PAGAMENTO:
-- Pix: Geração instantânea de QR Code e código "Pix Copia e Cola" diretamente na finalização do pedido pelo site, com aprovação imediata.
-- Outras opções disponíveis diretamente no checkout do site.
+function resumirTextoCompacto(str, maxLen = 170) {
+  const limpo = String(str || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!limpo) return "";
+  if (limpo.length <= maxLen) return limpo;
+  const corte = limpo.slice(0, maxLen).replace(/\s+\S*$/, "").trim();
+  return `${corte || limpo.slice(0, maxLen).trim()}...`;
+}
 
-FRETE, PRAZOS E ENTREGA:
-- O valor do frete e o prazo de entrega variam conforme o CEP de destino.
-- Para calcular o frete exato: basta adicionar o produto ao carrinho em https://www.gaicos-store.com.br/ e informar o CEP.
-- Nos Playmats Personalizados (feitos sob demanda com a arte do cliente), há o prazo de produção/confecção antes do envio pelos Correios/transportadora.`;
+export function extrairCatalogoDeJson(produtosBrutos, origem = "https://www.gaicos-store.com.br") {
+  let lista = [];
+  let formato = "custom";
+
+  if (Array.isArray(produtosBrutos)) {
+    lista = produtosBrutos;
+    if (lista[0]?.prices && !lista[0]?.priceCents) {
+      formato = "woocommerce";
+    }
+  } else if (Array.isArray(produtosBrutos?.products)) {
+    lista = produtosBrutos.products;
+    formato = "shopify";
+  } else if (Array.isArray(produtosBrutos?.items || produtosBrutos?.data)) {
+    lista = produtosBrutos.items || produtosBrutos.data;
+  }
+
+  const baseOrigem = String(origem || "https://www.gaicos-store.com.br").replace(/\/+$/, "");
+  const resultados = [];
+
+  for (const p of lista) {
+    if (!p || p.active === false) continue;
+
+    if (formato === "shopify") {
+      const variante = Array.isArray(p.variants) ? p.variants[0] : null;
+      const preco = formatarPrecoReal(variante?.price, { emCentavos: false });
+      const precoAntigo = formatarPrecoReal(variante?.compare_at_price, { emCentavos: false });
+      const emPromocao = Boolean(precoAntigo && preco && precoAntigo !== preco);
+      const slug = p.handle ? `/products/${p.handle}` : "/products";
+      resultados.push({
+        nome: String(p.title || "").trim(),
+        categoria: String(p.product_type || "Catálogo").trim(),
+        preco: emPromocao ? precoAntigo : preco,
+        precoPromo: emPromocao ? preco : "",
+        emPromocao,
+        personalizavel: false,
+        resumo: resumirTextoCompacto(p.body_html || ""),
+        link: `${baseOrigem}${slug}`
+      });
+      continue;
+    }
+
+    if (formato === "woocommerce") {
+      const minor = Number(p.prices?.currency_minor_unit ?? 2);
+      const divisor = 10 ** minor;
+      const precoAtualNum = Number(p.prices?.price) / divisor;
+      const precoRegularNum = Number(p.prices?.regular_price || p.prices?.price) / divisor;
+      const emPromocao = Boolean(precoRegularNum > precoAtualNum && precoAtualNum > 0);
+      resultados.push({
+        nome: String(p.name || "").trim(),
+        categoria: String(p.categories?.[0]?.name || "Catálogo").trim(),
+        preco: formatarPrecoReal(emPromocao ? precoRegularNum : precoAtualNum, { emCentavos: false }),
+        precoPromo: emPromocao ? formatarPrecoReal(precoAtualNum, { emCentavos: false }) : "",
+        emPromocao,
+        personalizavel: false,
+        resumo: resumirTextoCompacto(p.short_description || p.description || ""),
+        link: p.permalink || `${baseOrigem}/produtos`
+      });
+      continue;
+    }
+
+    const preco = formatarPrecoReal(p.priceCents, { emCentavos: true })
+      || formatarPrecoReal(p.price, { emCentavos: false });
+    const precoPromo = formatarPrecoReal(p.promoPriceCents, { emCentavos: true })
+      || formatarPrecoReal(p.promoPrice, { emCentavos: false });
+    const emPromocao = Boolean(p.isPromo && precoPromo);
+    const rota = p.customizable
+      ? "/pedido-personalizado"
+      : (p.slug ? `/produto/${p.slug}` : "/produtos");
+
+    resultados.push({
+      nome: String(p.name || p.title || "").trim(),
+      categoria: String(p.categoryName || p.category || "Catálogo").trim(),
+      preco,
+      precoPromo: emPromocao ? precoPromo : "",
+      emPromocao,
+      personalizavel: !!p.customizable,
+      resumo: resumirTextoCompacto(p.description || ""),
+      link: `${baseOrigem}${rota}`
+    });
+  }
+
+  return resultados.filter(item => item.nome);
+}
+
+export function extrairFaqDeBundleJs(jsTexto) {
+  if (!jsTexto || typeof jsTexto !== "string") return [];
+  const faqs = [];
+  const vistas = new Set();
+
+  // Suporta strings delimitadas por crase, aspas duplas ou aspas simples
+  const padrao = /question\s*:\s*([`"'])([\s\S]*?)\1\s*,\s*answer\s*:\s*([`"'])([\s\S]*?)\3/g;
+  let match;
+  while ((match = padrao.exec(jsTexto)) !== null) {
+    const pergunta = match[2].replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+    const resposta = match[4].replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+    if (pergunta.length > 5 && resposta.length > 5 && !vistas.has(pergunta)) {
+      vistas.add(pergunta);
+      faqs.push({ pergunta, resposta });
+    }
+    if (faqs.length >= 25) break;
+  }
+  return faqs;
+}
+
+function extrairJsonLd(html, origem) {
+  const produtos = [];
+  const faqs = [];
+  if (!html || typeof html !== "string") return { produtos, faqs };
+
+  const regex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      const blocos = Array.isArray(parsed) ? parsed : [parsed];
+      for (const b of blocos) {
+        if (!b || typeof b !== "object") continue;
+        if (b["@type"] === "Product" && b.name) {
+          const offer = Array.isArray(b.offers) ? b.offers[0] : b.offers;
+          const preco = formatarPrecoReal(offer?.price, { emCentavos: false });
+          produtos.push({
+            nome: String(b.name).trim(),
+            categoria: String(b.category || "Catálogo").trim(),
+            preco,
+            precoPromo: "",
+            emPromocao: false,
+            personalizavel: false,
+            resumo: resumirTextoCompacto(b.description || ""),
+            link: offer?.url || origem
+          });
+        } else if (b["@type"] === "FAQPage" && Array.isArray(b.mainEntity)) {
+          for (const q of b.mainEntity) {
+            const p = String(q?.name || "").trim();
+            const r = String(q?.acceptedAnswer?.text || "").trim();
+            if (p && r) faqs.push({ pergunta: p, resposta: r });
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return { produtos, faqs };
+}
 
 function limparHtmlParaTexto(html) {
   if (!html || typeof html !== "string") return "";
@@ -47,7 +193,7 @@ function limparHtmlParaTexto(html) {
   const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)
     || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i);
 
-  let texto = html
+  const texto = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
@@ -66,7 +212,6 @@ function limparHtmlParaTexto(html) {
     .map(l => l.replace(/\s+/g, " ").trim())
     .filter(l => l.length > 2);
 
-  // Remove linhas duplicadas seguidas mantendo a ordem
   const unicas = [];
   for (const l of linhas) {
     if (unicas[unicas.length - 1] !== l) {
@@ -101,29 +246,71 @@ function extrairLinksInternos(html, urlBase) {
   return Array.from(links);
 }
 
-async function baixarPagina(url, timeoutMs = 8000) {
+async function baixarTexto(url, timeoutMs = 8000, maxBytes = 1500000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const resp = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GaicosBot/9.1",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GaicosBot/9.2",
+        "Accept": "text/html,application/json,application/javascript,*/*;q=0.8",
         "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"
       }
     });
     if (!resp.ok) return null;
-    const contentType = resp.headers.get("content-type") || "";
-    if (!contentType.includes("text/html") && !contentType.includes("xml") && !contentType.includes("json")) {
-      return null;
-    }
-    return await resp.text();
+    const cl = Number(resp.headers.get("content-length") || 0);
+    if (cl > maxBytes) return null;
+    const texto = await resp.text();
+    if (texto.length > maxBytes) return texto.slice(0, maxBytes);
+    return texto;
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function baixarJson(url, timeoutMs = 8000) {
+  const txt = await baixarTexto(url, timeoutMs, 1000000);
+  if (!txt) return null;
+  try {
+    return JSON.parse(txt);
+  } catch {
+    return null;
+  }
+}
+
+function formatarSecaoCatalogo(produtos = []) {
+  if (!produtos.length) return "";
+  const porCategoria = new Map();
+  for (const p of produtos) {
+    const cat = p.categoria || "Catálogo";
+    if (!porCategoria.has(cat)) porCategoria.set(cat, []);
+    porCategoria.get(cat).push(p);
+  }
+
+  const linhas = ["=== CATÁLOGO REAL DO SITE ==="];
+  for (const [categoria, itens] of porCategoria.entries()) {
+    linhas.push(`\n[${categoria}]`);
+    for (const item of itens) {
+      const precoTxt = item.emPromocao && item.precoPromo
+        ? `Promoção de ${item.preco} por ${item.precoPromo}`
+        : (item.preco || "Consultar no site");
+      const resumoTxt = item.resumo ? ` — ${item.resumo}` : "";
+      linhas.push(`• ${item.nome} | ${precoTxt} | ${item.link}${resumoTxt}`);
+    }
+  }
+  return linhas.join("\n");
+}
+
+function formatarSecaoFaq(faqs = []) {
+  if (!faqs.length) return "";
+  const linhas = ["=== PERGUNTAS FREQUENTES (FAQ DO SITE) ==="];
+  for (const f of faqs) {
+    linhas.push(`• P: ${f.pergunta}\n  R: ${f.resposta}`);
+  }
+  return linhas.join("\n");
 }
 
 export async function sincronizarConhecimentoSite(urlSite = "https://www.gaicos-store.com.br/") {
@@ -139,38 +326,77 @@ export async function sincronizarConhecimentoSite(urlSite = "https://www.gaicos-
     throw new Error("URL do site inválida. Use o formato https://www.gaicos-store.com.br/");
   }
 
-  const urlsParaVisitar = new Set([
-    origem,
-    `${origem}/produtos`,
-    `${origem}/playmats`,
-    `${origem}/criar-playmat`
+  const paginasLidas = [];
+  const trechosExtraidos = [];
+  let produtos = [];
+  let faqs = [];
+
+  // 1. Consulta endpoints públicos de catálogo (API REST, Shopify, WooCommerce) e a home HTML em paralelo
+  const [apiCustom, apiShopify, apiWoo, htmlHome] = await Promise.all([
+    baixarJson(`${origem}/api/products`),
+    baixarJson(`${origem}/products.json?limit=50`),
+    baixarJson(`${origem}/wp-json/wc/store/v1/products?per_page=50`),
+    baixarTexto(urlLimpa, 8000, 800000)
   ]);
 
-  const trechosExtraidos = [];
-  const paginasLidas = [];
-
-  // Lê a página principal primeiro para descobrir novos links internos
-  const htmlHome = await baixarPagina(urlLimpa);
-  if (htmlHome) {
-    paginasLidas.push(urlLimpa);
-    const textoHome = limparHtmlParaTexto(htmlHome);
-    if (textoHome.length > 40) {
-      trechosExtraidos.push(`--- PÁGINA: ${urlLimpa} ---\n${textoHome}`);
-    }
-    for (const link of extrairLinksInternos(htmlHome, urlLimpa).slice(0, 8)) {
-      urlsParaVisitar.add(link);
-    }
+  if (apiCustom) {
+    produtos = extrairCatalogoDeJson(apiCustom, origem);
+    if (produtos.length) paginasLidas.push(`${origem}/api/products`);
+  }
+  if (!produtos.length && apiShopify) {
+    produtos = extrairCatalogoDeJson(apiShopify, origem);
+    if (produtos.length) paginasLidas.push(`${origem}/products.json`);
+  }
+  if (!produtos.length && apiWoo) {
+    produtos = extrairCatalogoDeJson(apiWoo, origem);
+    if (produtos.length) paginasLidas.push(`${origem}/wp-json/wc/store/v1/products`);
   }
 
-  for (const url of urlsParaVisitar) {
-    if (paginasLidas.includes(url)) continue;
-    if (paginasLidas.length >= 8) break;
-    const html = await baixarPagina(url, 6000);
-    if (!html) continue;
-    paginasLidas.push(url);
-    const texto = limparHtmlParaTexto(html);
-    if (texto.length > 40) {
-      trechosExtraidos.push(`--- PÁGINA: ${url} ---\n${texto}`);
+  if (htmlHome) {
+    paginasLidas.push(urlLimpa);
+    const ld = extrairJsonLd(htmlHome, origem);
+    if (!produtos.length && ld.produtos.length) produtos = ld.produtos;
+    if (ld.faqs.length) faqs.push(...ld.faqs);
+
+    const textoHome = limparHtmlParaTexto(htmlHome);
+    const ehSpaShell = htmlHome.length < 2500 && /<script[^>]+src=/i.test(htmlHome);
+
+    if (ehSpaShell) {
+      const scriptMatch = htmlHome.match(/<script[^>]+src=["']([^"']+\.js[^"']*)["']/i);
+      if (scriptMatch?.[1]) {
+        try {
+          const urlBundle = new URL(scriptMatch[1], origem).href;
+          const jsBundle = await baixarTexto(urlBundle, 9000, 1500000);
+          if (jsBundle) {
+            const faqsJs = extrairFaqDeBundleJs(jsBundle);
+            if (faqsJs.length) {
+              faqs.push(...faqsJs);
+              paginasLidas.push(urlBundle);
+            }
+          }
+        } catch {}
+      }
+      if (textoHome.length > 15) {
+        trechosExtraidos.push(`--- SITE (${urlLimpa}) ---\n${textoHome}`);
+      }
+    } else {
+      if (textoHome.length > 40) {
+        trechosExtraidos.push(`--- PÁGINA: ${urlLimpa} ---\n${textoHome}`);
+      }
+      const urlsParaVisitar = new Set(extrairLinksInternos(htmlHome, urlLimpa).slice(0, 6));
+      for (const url of urlsParaVisitar) {
+        if (paginasLidas.includes(url) || paginasLidas.length >= 8) break;
+        const html = await baixarTexto(url, 6000, 600000);
+        if (!html) continue;
+        paginasLidas.push(url);
+        const ldSub = extrairJsonLd(html, origem);
+        if (ldSub.produtos.length) produtos.push(...ldSub.produtos);
+        if (ldSub.faqs.length) faqs.push(...ldSub.faqs);
+        const texto = limparHtmlParaTexto(html);
+        if (texto.length > 40) {
+          trechosExtraidos.push(`--- PÁGINA: ${url} ---\n${texto}`);
+        }
+      }
     }
   }
 
@@ -180,21 +406,34 @@ export async function sincronizarConhecimentoSite(urlSite = "https://www.gaicos-
   if (ehGaicosStore) {
     partes.push(CONHECIMENTO_PADRAO_GAICOS);
   }
+  const blocoCatalogo = formatarSecaoCatalogo(produtos);
+  if (blocoCatalogo) partes.push(blocoCatalogo);
 
-  if (trechosExtraidos.length > 0) {
-    partes.push("=== CONTEÚDO EXTRAÍDO AUTOMATICAMENTE DO SITE ===\n" + trechosExtraidos.join("\n\n"));
-  } else if (!ehGaicosStore) {
+  const blocoFaq = formatarSecaoFaq(faqs);
+  if (blocoFaq) partes.push(blocoFaq);
+
+  if (trechosExtraidos.length > 0 && (!blocoCatalogo || !ehSpaShellTexto(trechosExtraidos))) {
+    partes.push("=== CONTEÚDO EXTRAÍDO DO SITE ===\n" + trechosExtraidos.join("\n\n"));
+  }
+
+  if (partes.length === 0) {
     throw new Error("Não foi possível acessar o conteúdo público dessa URL no momento. Verifique se o site está no ar.");
   }
 
-  const textoFinal = partes.join("\n\n").slice(0, 24000);
+  const textoFinal = partes.join("\n\n").slice(0, 28000);
 
   return {
     ok: true,
     urlSite: urlLimpa,
     paginasLidas,
+    totalProdutos: produtos.length,
+    totalFaqs: faqs.length,
+    produtos,
     ultimaSincronizacao: new Date().toISOString(),
     conhecimentoSite: textoFinal
   };
 }
 
+function ehSpaShellTexto(trechos) {
+  return trechos.length === 1 && trechos[0].length < 220;
+}
