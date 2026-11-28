@@ -171,8 +171,8 @@
 
                 <div class="grid-campos" style="margin-top:12px;">
                     <div>
-                        <label class="rotulo" for="iaTelefoneAlerta">WhatsApp para receber alertas (Gaicos em pessoa)</label>
-                        <input type="text" id="iaTelefoneAlerta" placeholder="5511999999999">
+                        <label class="rotulo" for="iaTelefoneAlerta">WhatsApp extra p/ alertas (opcional, diferente do cliente)</label>
+                        <input type="text" id="iaTelefoneAlerta" placeholder="Ex: 5511999999999 (erros sempre vão ao Grupo de Controle)">
                     </div>
                     <div>
                         <label class="rotulo" for="iaMinutosSemInteracao">Alertar falta de interação após (min)</label>
@@ -187,13 +187,13 @@
                         <select id="iaProvedor">
                             <option value="local">Modo Inteligente Local (Sem Chave - Gratuito)</option>
                             <option value="gemini">Google Gemini (Recomendado - API Gratuita)</option>
-                            <option value="groq">Groq (Llama 3.3 - API Gratuita e Ultra-rápida)</option>
+                            <option value="groq">Groq (OpenAI OSS 120B - API Gratuita e Ultra-rápida)</option>
                             <option value="openai">OpenAI (ChatGPT - gpt-4o-mini)</option>
                         </select>
                     </div>
                     <div id="blocoModeloIa">
                         <label class="rotulo" for="iaModelo">Modelo da IA</label>
-                        <input type="text" id="iaModelo" placeholder="Ex: gemini-2.5-flash">
+                        <input type="text" id="iaModelo" placeholder="Ex: openai/gpt-oss-120b">
                     </div>
                 </div>
 

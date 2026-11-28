@@ -25,6 +25,8 @@ export {
 const sessoes = new Map();
 const mensagensGeradasPeloBot = new Set();
 const timersInatividade = new Map();
+const timersEsperaHumano = new Map();
+const ultimoAutoSyncPorTenant = new Map();
 
 function chaveSessao(jid) {
   return `${obterTenantAtual()}:${jid}`;
@@ -43,6 +45,13 @@ function normalizarTelefoneAlerta(valor) {
   return digits;
 }
 
+function mesmaPessoaTelefoneOuJid(telA, jidA, telB, jidB) {
+  if (jidA && jidB && String(jidA) === String(jidB)) return true;
+  const a = normalizarTelefoneAlerta(telA);
+  const b = normalizarTelefoneAlerta(telB);
+  return Boolean(a && b && a === b);
+}
+
 function padraoIa() {
   const ehAdmin = obterTenantAtual() === TENANT_PADRAO;
   return {
@@ -54,6 +63,10 @@ function padraoIa() {
     nomeResponsavel: ehAdmin ? "Gaicos" : "nosso especialista",
     telefoneAlertaHumano: "",
     minutosSemInteracaoAlerta: 10,
+    minutosEsperaHumanoAviso: 60,
+    mensagemEsperaHumano: ehAdmin
+      ? "Olá! Passando rapidinho para avisar que o *Gaicos* está finalizando alguns playmats por aqui, mas assim que puder ele já vem te atender de forma personalizada! Muito obrigado pela paciência 😊"
+      : "Olá! Passando para avisar que nosso especialista já vai continuar seu atendimento de forma personalizada assim que finalizar por aqui! Muito obrigado pela paciência 😊",
     urlSite: ehAdmin ? "https://www.gaicos-store.com.br/" : "",
     conhecimentoSite: ehAdmin ? CONHECIMENTO_PADRAO_GAICOS : "",
     conhecimentoExtra: ehAdmin ? CONHECIMENTO_EXTRA_PADRAO : "",
@@ -61,20 +74,38 @@ function padraoIa() {
     ultimaSincronizacao: null,
     promptSistema: ehAdmin
       ? PROMPT_SISTEMA_PADRAO
-      : "Você é um vendedor atencioso da loja. Responda em 2 a 4 linhas curtas com base no site e chame um humano com [CHAMAR_ATENDENTE] se não tiver certeza.",
+      : "Você é um consultor de vendas educado, cordial e persuasivo. Responda em 2 a 4 linhas curtas com base no site e chame um humano com [CHAMAR_ATENDENTE] se não tiver certeza.",
     mensagemTransferenciaHumano: ehAdmin
-      ? "Opa! Pra te atender certinho do jeito que você merece, já tô chamando o *Gaicos em pessoa* aqui pra falar com você agora mesmo! Só um segundinho 🙌"
-      : "Perfeito! Já chamei um especialista em pessoa para falar com você. Aguarde só um instante que já te respondemos por aqui! 🙌",
+      ? "Perfeito! Vou chamar o *Gaicos em pessoa* para te atender certinho por aqui. Só um instante, por favor! 😊"
+      : "Perfeito! Vou chamar um especialista em pessoa para te atender certinho por aqui. Só um instante, por favor! 😊",
     horasPausaHumano: 24,
     pausarAoResponderManual: false,
     avisarGrupoControle: true
   };
 }
 
+function ehPromptLegado(txt) {
+  return /^Você é o atendente virtual da Gaicos Store|^Você é o Gaicos Jr, vendedor especialista da Gaicos Store/i.test(String(txt || "").trim());
+}
+
+function ehMensagemTransferenciaLegada(txt) {
+  return /^Perfeito! Já chamei um atendente humano da \*Gaicos Store\*/i.test(String(txt || "").trim());
+}
+
 function normalizarDadosTriagem(bruto = {}) {
   const iaPadrao = padraoIa();
   const iaBruto = (bruto && typeof bruto.ia === "object" && bruto.ia) ? bruto.ia : {};
   const minInat = Number(iaBruto.minutosSemInteracaoAlerta);
+  const minEsp = Number(iaBruto.minutosEsperaHumanoAviso);
+  const provedor = ["local", "gemini", "groq", "openai"].includes(iaBruto.provedor) ? iaBruto.provedor : iaPadrao.provedor;
+  let modelo = typeof iaBruto.modelo === "string" ? iaBruto.modelo.trim() : "";
+  if (provedor === "groq" && (!modelo || modelo === "llama-3.3-70b-versatile")) {
+    modelo = "openai/gpt-oss-120b";
+  }
+
+  const promptRaw = typeof iaBruto.promptSistema === "string" ? iaBruto.promptSistema.trim() : "";
+  const msgTransfRaw = typeof iaBruto.mensagemTransferenciaHumano === "string" ? iaBruto.mensagemTransferenciaHumano.trim() : "";
+
   return {
     ativo: !!bruto?.ativo,
     boasVindas: typeof bruto?.boasVindas === "string" ? bruto.boasVindas : "",
@@ -82,15 +113,19 @@ function normalizarDadosTriagem(bruto = {}) {
     nodes: Array.isArray(bruto?.nodes) ? bruto.nodes : [],
     ia: {
       ativa: iaBruto.ativa !== undefined ? !!iaBruto.ativa : iaPadrao.ativa,
-      provedor: ["local", "gemini", "groq", "openai"].includes(iaBruto.provedor) ? iaBruto.provedor : iaPadrao.provedor,
+      provedor,
       apiKey: typeof iaBruto.apiKey === "string" ? iaBruto.apiKey : "",
-      modelo: typeof iaBruto.modelo === "string" ? iaBruto.modelo : "",
+      modelo,
       nomeBot: typeof iaBruto.nomeBot === "string" && iaBruto.nomeBot.trim() ? iaBruto.nomeBot.trim() : iaPadrao.nomeBot,
       nomeResponsavel: typeof iaBruto.nomeResponsavel === "string" && iaBruto.nomeResponsavel.trim()
         ? iaBruto.nomeResponsavel.trim()
         : iaPadrao.nomeResponsavel,
       telefoneAlertaHumano: normalizarTelefoneAlerta(iaBruto.telefoneAlertaHumano || ""),
       minutosSemInteracaoAlerta: Number.isFinite(minInat) ? Math.max(0, Math.min(1440, minInat)) : iaPadrao.minutosSemInteracaoAlerta,
+      minutosEsperaHumanoAviso: Number.isFinite(minEsp) ? Math.max(0, Math.min(1440, minEsp)) : iaPadrao.minutosEsperaHumanoAviso,
+      mensagemEsperaHumano: typeof iaBruto.mensagemEsperaHumano === "string" && iaBruto.mensagemEsperaHumano.trim()
+        ? iaBruto.mensagemEsperaHumano.trim()
+        : iaPadrao.mensagemEsperaHumano,
       urlSite: typeof iaBruto.urlSite === "string" && iaBruto.urlSite.trim() ? iaBruto.urlSite.trim() : iaPadrao.urlSite,
       conhecimentoSite: typeof iaBruto.conhecimentoSite === "string" && iaBruto.conhecimentoSite.trim()
         ? iaBruto.conhecimentoSite
@@ -100,11 +135,9 @@ function normalizarDadosTriagem(bruto = {}) {
         : iaPadrao.conhecimentoExtra,
       catalogoProdutos: Array.isArray(iaBruto.catalogoProdutos) ? iaBruto.catalogoProdutos.slice(0, 100) : [],
       ultimaSincronizacao: iaBruto.ultimaSincronizacao || null,
-      promptSistema: typeof iaBruto.promptSistema === "string" && iaBruto.promptSistema.trim()
-        ? iaBruto.promptSistema
-        : iaPadrao.promptSistema,
-      mensagemTransferenciaHumano: typeof iaBruto.mensagemTransferenciaHumano === "string" && iaBruto.mensagemTransferenciaHumano.trim()
-        ? iaBruto.mensagemTransferenciaHumano
+      promptSistema: promptRaw && !ehPromptLegado(promptRaw) ? promptRaw : iaPadrao.promptSistema,
+      mensagemTransferenciaHumano: msgTransfRaw && !ehMensagemTransferenciaLegada(msgTransfRaw)
+        ? msgTransfRaw
         : iaPadrao.mensagemTransferenciaHumano,
       horasPausaHumano: Number(iaBruto.horasPausaHumano) > 0 ? Number(iaBruto.horasPausaHumano) : 24,
       pausarAoResponderManual: !!iaBruto.pausarAoResponderManual,
@@ -207,6 +240,8 @@ export function reativarAtendimentoBot(jid) {
     salvarPausasArquivo({});
     return;
   }
+  cancelarTimerEsperaHumano(jid);
+  cancelarTimerInatividade(jid);
   delete pausas[jid];
   salvarPausasArquivo(pausas);
   limparHistoricoCliente(jid);
@@ -397,6 +432,20 @@ async function enviarMensagemBot(sock, jid, conteudo) {
   return enviado;
 }
 
+export async function notificarErroGrupoControle(sock, { contexto = "Triagem IA", erro = "", nomeCliente = "" } = {}) {
+  try {
+    const configGeral = lerConfig();
+    const grupoId = configGeral?.grupoControleId;
+    if (!grupoId || !sock) return;
+    const textoErro =
+      `⚠️ *Erro técnico interno (${contexto})*\n` +
+      (nomeCliente ? `👤 *Cliente:* ${nomeCliente}\n` : "") +
+      `🛠️ *Detalhe:* ${String(erro || "Falha desconhecida").slice(0, 400)}\n` +
+      `_Mensagem mantida oculta para o cliente._`;
+    await enviarMensagemBot(sock, grupoId, { text: textoErro });
+  } catch {}
+}
+
 export async function notificarResponsavelHumano(
   sock,
   configIa = {},
@@ -419,8 +468,9 @@ export async function notificarResponsavelHumano(
 
   const destinosEnviados = new Set();
 
+  // Nunca envia o alerta interno para o próprio número/chat do cliente
   const telAlerta = normalizarTelefoneAlerta(configIa?.telefoneAlertaHumano);
-  if (telAlerta) {
+  if (telAlerta && !mesmaPessoaTelefoneOuJid(telAlerta, `${telAlerta}@s.whatsapp.net`, tel, jidCliente)) {
     let jidAlerta = `${telAlerta}@s.whatsapp.net`;
     if (typeof sock?.onWhatsApp === "function") {
       try {
@@ -428,19 +478,22 @@ export async function notificarResponsavelHumano(
         if (Array.isArray(res) && res[0]?.jid) jidAlerta = res[0].jid;
       } catch {}
     }
-    try {
-      await enviarMensagemBot(sock, jidAlerta, { text: textoAlerta });
-      destinosEnviados.add(jidAlerta);
-    } catch (err) {
-      console.log("Aviso: não foi possível enviar alerta direto no WhatsApp configurado:", err.message);
+    if (!mesmaPessoaTelefoneOuJid(telAlerta, jidAlerta, tel, jidCliente)) {
+      try {
+        await enviarMensagemBot(sock, jidAlerta, { text: textoAlerta });
+        destinosEnviados.add(jidAlerta);
+      } catch (err) {
+        console.log("Aviso: não foi possível enviar alerta direto no WhatsApp configurado:", err.message);
+      }
     }
   }
 
+  // Grupo de Controle sempre recebe os chamados e nunca expõe nada ao cliente
   if (configIa?.avisarGrupoControle !== false) {
     try {
       const configGeral = lerConfig();
       const grupoId = configGeral?.grupoControleId;
-      if (grupoId && !destinosEnviados.has(grupoId)) {
+      if (grupoId && grupoId !== jidCliente && !destinosEnviados.has(grupoId)) {
         await enviarMensagemBot(sock, grupoId, { text: textoAlerta });
       }
     } catch (err) {
@@ -456,6 +509,72 @@ function cancelarTimerInatividade(jid) {
     clearTimeout(timer);
     timersInatividade.delete(chave);
   }
+}
+
+export function cancelarTimerEsperaHumano(jid) {
+  const chave = chaveSessao(jid);
+  const timer = timersEsperaHumano.get(chave);
+  if (timer) {
+    clearTimeout(timer);
+    timersEsperaHumano.delete(chave);
+  }
+}
+
+/**
+ * Se o responsável não responder após a escalação em 1 hora (60 min), envia uma única
+ * mensagem educada de espera para o cliente, reforça no Grupo de Controle e inicia
+ * a pausa completa (ex: 8000h) sem enviar mais nada.
+ */
+export function agendarAvisoEsperaHumano(
+  sock,
+  configIa = {},
+  { jid, telefoneCliente, nomeCliente, ultimaMensagem = "", horasPausa = 24, delayMsOverride = null } = {}
+) {
+  cancelarTimerEsperaHumano(jid);
+  const minutosEspera = Number(configIa?.minutosEsperaHumanoAviso ?? 60);
+  const delayMs = Number.isFinite(delayMsOverride)
+    ? delayMsOverride
+    : (minutosEspera > 0 ? Math.min(minutosEspera, 1440) * 60 * 1000 : 0);
+  if (delayMs <= 0 || !sock || !jid) return;
+
+  const tid = obterTenantAtual();
+  const chave = `${tid}:${jid}`;
+
+  const timer = setTimeout(() => {
+    timersEsperaHumano.delete(chave);
+    executarNoTenant(tid, async () => {
+      if (!clienteEstaPausado(jid)) return;
+      const cfgAtual = lerArquivo();
+      const msgEspera = String(cfgAtual.ia?.mensagemEsperaHumano || configIa?.mensagemEsperaHumano || "").trim()
+        || `Olá! Passando rapidinho para avisar que o *${cfgAtual.ia?.nomeResponsavel || "Gaicos"}* está finalizando alguns playmats por aqui, mas assim que puder ele já vem te atender de forma personalizada! Muito obrigado pela paciência 😊`;
+
+      try {
+        await enviarMensagemBot(sock, jid, { text: msgEspera });
+      } catch {}
+
+      const horasFinais = cfgAtual.ia?.horasPausaHumano || horasPausa || 24;
+      pausarAtendimentoHumano(jid, {
+        telefone: telefoneCliente,
+        nome: nomeCliente,
+        motivo: `Aviso de 1h enviado — aguardando atendimento (${horasFinais}h pausado)`,
+        ultimaMensagem,
+        horas: horasFinais
+      });
+
+      await notificarResponsavelHumano(sock, cfgAtual.ia, {
+        jidCliente: jid,
+        telefoneCliente,
+        nomeCliente,
+        ultimaMensagem,
+        motivo: `Cliente aguardando resposta há ${minutosEspera} min (aviso educado enviado; bot silenciado por ${horasFinais}h)`,
+        horasPausa: horasFinais,
+        pausouBot: true
+      });
+    }).catch(() => {});
+  }, delayMs);
+
+  timer.unref?.();
+  timersEsperaHumano.set(chave, timer);
 }
 
 function agendarAlertaFaltaInteracao(sock, configIa, { jid, telefoneCliente, nomeCliente, ultimaMensagem }) {
@@ -495,8 +614,54 @@ function agendarAlertaFaltaInteracao(sock, configIa, { jid, telefoneCliente, nom
   timersInatividade.set(chave, timer);
 }
 
+async function tentarAutoSincronizarCatalogo(config) {
+  const tid = obterTenantAtual();
+  const agora = Date.now();
+  const ultimo = ultimoAutoSyncPorTenant.get(tid) || 0;
+  if (agora - ultimo < 10 * 60 * 1000) return config;
+  ultimoAutoSyncPorTenant.set(tid, agora);
+  try {
+    const sync = await Promise.race([
+      sincronizarSiteNaTriagem(config.ia.urlSite),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
+    ]);
+    return sync?.dados || lerArquivo();
+  } catch {
+    return config;
+  }
+}
+
+async function acionarEscalacaoParaHumano(sock, config, { jid, telefoneCliente, nomeContato, texto, motivo, respostaCliente }) {
+  const horas = config.ia?.horasPausaHumano || 24;
+  cancelarTimerInatividade(jid);
+  pausarAtendimentoHumano(jid, {
+    telefone: telefoneCliente,
+    nome: nomeContato,
+    motivo,
+    ultimaMensagem: texto,
+    horas
+  });
+  await enviarMensagemBot(sock, jid, { text: respostaCliente });
+  await notificarResponsavelHumano(sock, config.ia, {
+    jidCliente: jid,
+    telefoneCliente,
+    nomeCliente: nomeContato,
+    ultimaMensagem: texto,
+    motivo,
+    horasPausa: horas,
+    pausouBot: true
+  });
+  agendarAvisoEsperaHumano(sock, config.ia, {
+    jid,
+    telefoneCliente,
+    nomeCliente: nomeContato,
+    ultimaMensagem: texto,
+    horasPausa: horas
+  });
+}
+
 export async function processarTriagem(sock, msg) {
-  const config = lerArquivo();
+  let config = lerArquivo();
   if (!config.ativo) return false;
   if (!msg?.message || !ehConversaPrivada(msg.key?.remoteJid)) return false;
 
@@ -511,6 +676,7 @@ export async function processarTriagem(sock, msg) {
       return false;
     }
     cancelarTimerInatividade(jid);
+    cancelarTimerEsperaHumano(jid);
     if (/^#bot$/i.test(texto)) {
       reativarAtendimentoBot(jid);
       return false;
@@ -536,26 +702,14 @@ export async function processarTriagem(sock, msg) {
   // Se mandou áudio, imagem, figurinha ou arquivo sem legenda: escala imediatamente para o responsável
   if (!texto) {
     if (iaAtiva && ehMensagemMidiaSemTexto(msg) && !clienteEstaPausado(jid)) {
-      const horas = config.ia?.horasPausaHumano || 24;
       const responsavel = config.ia?.nomeResponsavel || "Gaicos";
-      pausarAtendimentoHumano(jid, {
-        telefone: telefoneCliente,
-        nome: nomeContato,
-        motivo: "Enviou áudio/imagem — precisa de atenção humana",
-        ultimaMensagem: "[Mídia/Áudio recebido]",
-        horas
-      });
-      await enviarMensagemBot(sock, jid, {
-        text: `Recebi seu arquivo/áudio aqui! Já tô chamando o *${responsavel} em pessoa* pra ver direitinho e te responder agora mesmo 🙌`
-      });
-      await notificarResponsavelHumano(sock, config.ia, {
-        jidCliente: jid,
+      await acionarEscalacaoParaHumano(sock, config, {
+        jid,
         telefoneCliente,
-        nomeCliente: nomeContato,
-        ultimaMensagem: "[Enviou mídia/áudio]",
+        nomeContato,
+        texto: "[Enviou mídia/áudio]",
         motivo: "Enviou áudio/imagem (atenção humana)",
-        horasPausa: horas,
-        pausouBot: true
+        respostaCliente: `Recebi seu arquivo aqui! Vou chamar o *${responsavel} em pessoa* para olhar direitinho e te responder por aqui. Só um instante, por favor! 😊`
       });
       return true;
     }
@@ -576,26 +730,20 @@ export async function processarTriagem(sock, msg) {
 
   console.log(`💬 [Triagem] Mensagem recebida de ${nomeContato} (${jid}): "${texto.slice(0, 80)}"`);
 
+  if (iaAtiva && config.ia?.urlSite && (!Array.isArray(config.ia.catalogoProdutos) || config.ia.catalogoProdutos.length === 0)) {
+    config = await tentarAutoSincronizarCatalogo(config);
+  }
+
   if (iaAtiva && clientePediuAtendenteHumano(texto)) {
     const msgHumano = config.ia?.mensagemTransferenciaHumano
-      || `Opa! Já tô chamando o *${config.ia?.nomeResponsavel || "Gaicos"} em pessoa* aqui pra falar com você! Só um instante 🙌`;
-    const horas = config.ia?.horasPausaHumano || 24;
-    pausarAtendimentoHumano(jid, {
-      telefone: telefoneCliente,
-      nome: nomeContato,
-      motivo: "Solicitou atendimento humano",
-      ultimaMensagem: texto,
-      horas
-    });
-    await enviarMensagemBot(sock, jid, { text: msgHumano });
-    await notificarResponsavelHumano(sock, config.ia, {
-      jidCliente: jid,
+      || `Perfeito! Vou chamar o *${config.ia?.nomeResponsavel || "Gaicos"} em pessoa* para te atender certinho por aqui. Só um instante, por favor! 😊`;
+    await acionarEscalacaoParaHumano(sock, config, {
+      jid,
       telefoneCliente,
-      nomeCliente: nomeContato,
-      ultimaMensagem: texto,
+      nomeContato,
+      texto,
       motivo: "Cliente solicitou atendimento humano",
-      horasPausa: horas,
-      pausouBot: true
+      respostaCliente: msgHumano
     });
     return true;
   }
@@ -629,26 +777,44 @@ export async function processarTriagem(sock, msg) {
       }
 
       if (clientePediuAtendenteHumano(opcao.texto) || /atendente|humano/i.test(opcao.texto)) {
-        const horas = config.ia?.horasPausaHumano || 24;
-        pausarAtendimentoHumano(jid, {
-          telefone: telefoneCliente,
-          nome: nomeContato,
-          motivo: `Menu: ${opcao.texto}`,
-          ultimaMensagem: opcao.texto,
-          horas
-        });
-        if (!opcao.resposta) {
-          await enviarMensagemBot(sock, jid, { text: config.ia?.mensagemTransferenciaHumano || "Chamei um atendente em pessoa para te atender!" });
+        const msgMenu = opcao.resposta
+          ? null
+          : (config.ia?.mensagemTransferenciaHumano || "Vou chamar o responsável em pessoa para te atender!");
+        if (msgMenu) {
+          await acionarEscalacaoParaHumano(sock, config, {
+            jid,
+            telefoneCliente,
+            nomeContato,
+            texto: `Escolheu opção: ${opcao.texto}`,
+            motivo: `Menu: ${opcao.texto}`,
+            respostaCliente: msgMenu
+          });
+        } else {
+          const horas = config.ia?.horasPausaHumano || 24;
+          pausarAtendimentoHumano(jid, {
+            telefone: telefoneCliente,
+            nome: nomeContato,
+            motivo: `Menu: ${opcao.texto}`,
+            ultimaMensagem: opcao.texto,
+            horas
+          });
+          await notificarResponsavelHumano(sock, config.ia, {
+            jidCliente: jid,
+            telefoneCliente,
+            nomeCliente: nomeContato,
+            ultimaMensagem: `Escolheu opção: ${opcao.texto}`,
+            motivo: `Menu: ${opcao.texto}`,
+            horasPausa: horas,
+            pausouBot: true
+          });
+          agendarAvisoEsperaHumano(sock, config.ia, {
+            jid,
+            telefoneCliente,
+            nomeCliente: nomeContato,
+            ultimaMensagem: opcao.texto,
+            horasPausa: horas
+          });
         }
-        await notificarResponsavelHumano(sock, config.ia, {
-          jidCliente: jid,
-          telefoneCliente,
-          nomeCliente: nomeContato,
-          ultimaMensagem: `Escolheu opção: ${opcao.texto}`,
-          motivo: `Menu: ${opcao.texto}`,
-          horasPausa: horas,
-          pausouBot: true
-        });
         return true;
       }
 
@@ -670,44 +836,59 @@ export async function processarTriagem(sock, msg) {
   }
 
   if (iaAtiva) {
-    const resultadoIa = await gerarRespostaAtendimento({
-      jid,
-      nomeCliente: nomeContato,
-      mensagemCliente: texto,
-      configIa: config.ia
-    });
-
-    if (resultadoIa.chamarAtendente) {
-      const horas = config.ia?.horasPausaHumano || 24;
-      const motivoEsc = resultadoIa.motivoEscalacao || "Bot solicitou atenção do responsável";
-      pausarAtendimentoHumano(jid, {
-        telefone: telefoneCliente,
-        nome: nomeContato,
-        motivo: motivoEsc,
-        ultimaMensagem: texto,
-        horas
+    try {
+      const resultadoIa = await gerarRespostaAtendimento({
+        jid,
+        nomeCliente: nomeContato,
+        mensagemCliente: texto,
+        configIa: config.ia
       });
+
+      if (resultadoIa.erroApi) {
+        await notificarErroGrupoControle(sock, {
+          contexto: "Motor IA",
+          erro: resultadoIa.erroApi,
+          nomeCliente: nomeContato
+        });
+      }
+
+      if (resultadoIa.chamarAtendente) {
+        await acionarEscalacaoParaHumano(sock, config, {
+          jid,
+          telefoneCliente,
+          nomeContato,
+          texto,
+          motivo: resultadoIa.motivoEscalacao || "Bot solicitou atenção do responsável",
+          respostaCliente: resultadoIa.resposta
+        });
+        return true;
+      }
+
       await enviarMensagemBot(sock, jid, { text: resultadoIa.resposta });
-      await notificarResponsavelHumano(sock, config.ia, {
-        jidCliente: jid,
+      agendarAlertaFaltaInteracao(sock, config.ia, {
+        jid,
         telefoneCliente,
         nomeCliente: nomeContato,
-        ultimaMensagem: texto,
-        motivo: motivoEsc,
-        horasPausa: horas,
-        pausouBot: true
+        ultimaMensagem: texto
+      });
+      return true;
+    } catch (err) {
+      await notificarErroGrupoControle(sock, {
+        contexto: "Processamento Triagem",
+        erro: err?.message || String(err),
+        nomeCliente: nomeContato
+      });
+      await acionarEscalacaoParaHumano(sock, config, {
+        jid,
+        telefoneCliente,
+        nomeContato,
+        texto,
+        motivo: "Falha interna — encaminhado ao responsável sem expor erro",
+        respostaCliente: config.ia?.mensagemTransferenciaHumano
+          || `Perfeito! Vou chamar o *${config.ia?.nomeResponsavel || "Gaicos"} em pessoa* para te atender certinho por aqui. Só um instante, por favor! 😊`
       });
       return true;
     }
-
-    await enviarMensagemBot(sock, jid, { text: resultadoIa.resposta });
-    agendarAlertaFaltaInteracao(sock, config.ia, {
-      jid,
-      telefoneCliente,
-      nomeCliente: nomeContato,
-      ultimaMensagem: texto
-    });
-    return true;
   }
 
   const nodeFallback = config.nodes.find(item => item.id === nodeAtualId) || config.nodes[0];

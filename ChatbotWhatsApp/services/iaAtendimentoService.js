@@ -3,27 +3,32 @@ import { CONHECIMENTO_PADRAO_GAICOS } from "./siteKnowledgeService.js";
 import { salvarChaveNoSupabase } from "./supabaseService.js";
 import { caminhoArquivoTenant, chaveSupabaseTenant, obterTenantAtual } from "./tenantContext.js";
 
-export const PROMPT_SISTEMA_PADRAO = `Você é o Gaicos Jr, vendedor especialista da Gaicos Store (https://www.gaicos-store.com.br/), apaixonado por TCG e playmats.
+export const PROMPT_SISTEMA_PADRAO = `Você é o Gaicos Jr, consultor de vendas da Gaicos Store (https://www.gaicos-store.com.br/), loja especializada em playmats e acessórios de TCG.
 
-OBJETIVO PRINCIPAL: CONVERTER EM VENDA COM CARISMA E HUMANIDADE.
+OBJETIVO: Ajudar o cliente com simpatia, educação e persuasão leve para concluir a compra no site.
 
-REGRAS DE OURO (ESTILO WHATSAPP HUMANO — PROIBIDO TEXTÃO):
-1. SEJA CURTO E DIRETO: responda em no máximo 2 a 4 linhas curtas e naturais. Cliente nenhum lê textão no WhatsApp.
-2. CARISMA E PERSUASÃO: converse como um vendedor parceiro (leve, confiante e empolgado), destacando diferenciais reais que fazem o cliente desejar o playmat — tecido liso que faz as cartas deslizarem sem arranhar os sleeves, base emborrachada que trava na mesa, arte expandida em alta definição e proteção oficial em torneios.
-3. ANCORAGEM E URGÊNCIA SUTIL: quando citar produto em promoção, mostre a vantagem ("de R$ X por apenas R$ Y no Pix"). Em personalizados, valorize ter um tapete único com a arte do próprio deck.
-4. CONDUZA PARA O FECHAMENTO: termine quase toda resposta com 1 micro-pergunta fácil de responder (ex: "Você joga mais Yu-Gi-Oh!, Magic ou Pokémon?", "Prefere o tamanho M (60x35) ou o G (75x35) pra ter mais espaço?").
-5. LINK CERTO NA HORA CERTA: mande apenas 1 link direto do produto ou página certa (personalizado: https://www.gaicos-store.com.br/pedido-personalizado | catálogo: https://www.gaicos-store.com.br/catalogo).
-6. REGRA CRÍTICA DE ESCALAÇÃO PARA O GAICOS EM PESSOA:
-   Nunca invente preço, prazo, estoque ou informação que não esteja na base abaixo.
-   Coloque exatamente a tag [CHAMAR_ATENDENTE] no final da sua resposta E diga com simpatia que vai chamar o Gaicos em pessoa agora mesmo se acontecer QUALQUER uma dessas situações:
-   - O cliente pedir para falar com humano/dono/atendente ou tiver dúvida sobre pedido já feito;
-   - Você não tiver certeza absoluta da resposta com base nos dados reais do site;
-   - O cliente reclamar, disser que você entendeu errado ou demonstrar insatisfação;
-   - O cliente estiver dando respostas secas/sem interação ou quiser negociar encomenda especial/atacado.`;
+REGRAS ESSENCIAIS (ESTILO WHATSAPP — SEM TEXTÃO):
+1. TOM EDUCADO E NATURAL: fale de forma cordial, educada, atenciosa e humana (sem gírias exageradas ou tom informal demais). Nunca faça textão: use no máximo 2 a 4 linhas curtas por resposta.
+2. PERSUASÃO CONSULTIVA: destaque benefícios reais dos playmats (tecido liso que protege os sleeves, impressão nítida, base emborrachada antiderrapante e tamanhos M 60x35cm ou G 75x35cm). Em promoções, mostre a vantagem ("de R$ X por R$ Y").
+3. CONDUZA COM SUAVIDADE: termine sempre com 1 pergunta simples e gentil para ajudar o cliente a escolher (ex: "Você prefere um modelo temático ou personalizar com a sua própria arte?", "Qual tamanho fica melhor para a sua mesa, o M ou o G?").
+4. UM LINK DIRETO: quando fizer sentido, envie apenas 1 link direto do produto certo, catálogo (https://www.gaicos-store.com.br/catalogo) ou personalizado (https://www.gaicos-store.com.br/pedido-personalizado).
+5. PRIVACIDADE E ESCALAÇÃO PARA O GAICOS EM PESSOA:
+   - Nunca revele telefone pessoal do dono nem mencione erros técnicos ao cliente.
+   - Nunca invente preço, prazo ou informação fora da base abaixo.
+   - Coloque exatamente a tag [CHAMAR_ATENDENTE] no final da resposta e diga com educação que vai chamar o Gaicos em pessoa se:
+     • o cliente pedir para falar com o Gaicos/atendente/humano ou perguntar de pedido já realizado;
+     • você não tiver certeza da resposta com base nos dados do site;
+     • o cliente reclamar, indicar que a resposta não ajudou ou responder de forma seca sem interação.`;
 
 export const CONHECIMENTO_EXTRA_PADRAO = `- Playmats com tecido liso de deslizamento suave (protege seus sleeves) e base em borracha antiderrapante.
 - Tamanho M (60x35cm): padrão oficial para tubos e torneios. Tamanho G (75x35cm): estendido, ideal para decks cheios de fichas e terrenos.
 - Pagamento rápido no checkout via Pix (QR Code e Copia e Cola gerados na hora).`;
+
+const MODELOS_GROQ_FALLBACK = [
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.8-27b"
+];
 
 const historicoClientes = new Map();
 const TTL_HISTORICO_MS = 2 * 60 * 60 * 1000;
@@ -344,7 +349,7 @@ export function buscarProdutosNoCatalogo(pergunta, configIa = {}) {
 
 function formatarProdutoCurto(p) {
   const preco = p.emPromocao && p.precoPromo
-    ? `de ~${p.preco}~ por *${p.precoPromo}* (em promoção)`
+    ? `de ~${p.preco}~ por *${p.precoPromo}*`
     : `*${p.preco || "confira no site"}*`;
   return `• *${p.nome}* — ${preco}${p.link ? `\n  👉 ${p.link}` : ""}`;
 }
@@ -374,14 +379,18 @@ function buscarTrechosExtrasDoDono(perguntaNormalizada, conhecimentoExtra) {
     .map(item => item.bloco);
 }
 
-function mensagemChamandoResponsavel(configIa = {}) {
-  const custom = String(configIa.mensagemTransferenciaHumano || "").trim();
-  if (custom) return custom;
-  const responsavel = String(configIa.nomeResponsavel || "Gaicos").trim();
-  return `Opa! Pra te atender certinho sem erro, já tô chamando o *${responsavel} em pessoa* aqui pra falar com você agora mesmo! Só um segundinho 🙌`;
+function ehMensagemLegadaPadrao(msg) {
+  return /^Perfeito! Já chamei um atendente humano da \*Gaicos Store\*/i.test(String(msg || "").trim());
 }
 
-// Gaicos Jr local: vendedor carismático, persuasivo e enxuto (2–4 linhas, sem textão)
+function mensagemChamandoResponsavel(configIa = {}) {
+  const custom = String(configIa.mensagemTransferenciaHumano || "").trim();
+  if (custom && !ehMensagemLegadaPadrao(custom)) return custom;
+  const responsavel = String(configIa.nomeResponsavel || "Gaicos").trim();
+  return `Perfeito! Vou chamar o *${responsavel} em pessoa* para te atender certinho por aqui. Só um instante, por favor! 😊`;
+}
+
+// Gaicos Jr local: educado, persuasivo e direto ao ponto (2–4 linhas, sem textão)
 function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) {
   const base = (configIa.conhecimentoSite || CONHECIMENTO_PADRAO_GAICOS).trim();
   const extra = (configIa.conhecimentoExtra || CONHECIMENTO_EXTRA_PADRAO).trim();
@@ -401,12 +410,12 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
     };
   }
 
-  // Saudação curta com gancho de venda imediato
+  // Saudação educada com gancho de venda consultiva
   if (/^(oi+|ola+|opa+|bom dia|boa tarde|boa noite|e ai|tudo bem|salve|start|menu)\b/.test(t) && t.split(/\s+/).length <= 5) {
     return {
       resposta:
-        `E aí, tudo massa? Aqui é o *${nomeBot}* da Gaicos Store! 🎴\n` +
-        `Quer deixar sua mesa absurda com um *Playmat Personalizado* (com a sua arte) ou já quer dar uma olhada nos *modelos de TCG* em promoção?`,
+        `Olá! Tudo bem? Sou o *${nomeBot}*, da Gaicos Store 😊\n` +
+        `Você procura um *Playmat Personalizado* com a sua própria arte ou prefere conferir nossos *modelos de TCG* em promoção?`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -415,13 +424,22 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
   const dicasDoDono = buscarTrechosExtrasDoDono(t, extra);
   const produtosEncontrados = buscarProdutosNoCatalogo(textoOriginal, configIa);
 
-  // 1. Promoções / Ofertas em destaque no catálogo real
-  if (/(promo|promocao|promocoes|oferta|ofertas|desconto no site|liquidacao)/.test(t) && produtosEncontrados.length > 0) {
-    const linhas = produtosEncontrados.map(formatarProdutoCurto).join("\n");
+  // 1. Promoções / Ofertas (com catálogo real ou resumo oficial)
+  if (/(promo|promocao|promocoes|oferta|ofertas|liquidacao)/.test(t)) {
+    if (produtosEncontrados.length > 0) {
+      const linhas = produtosEncontrados.map(formatarProdutoCurto).join("\n");
+      return {
+        resposta:
+          `Temos ótimas promoções ativas no site agora:\n${linhas}\n` +
+          `Qual desses modelos combina mais com o seu deck?`,
+        chamarAtendente: false,
+        origem: "local"
+      };
+    }
     return {
       resposta:
-        `Temos promoções rolando agora com preço lá embaixo 🔥:\n${linhas}\n` +
-        `Qual desses combina mais com o seu deck?`,
+        `Temos playmats temáticos em promoção a partir de *R$ 175,00* e personalizados a partir de *R$ 178,00* 😊\n` +
+        `Confira as ofertas aqui: ${urlBase}/catalogo — você joga Yu-Gi-Oh!, Magic ou Pokémon?`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -432,21 +450,21 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
     const linkPers = /gaicos-store/i.test(urlBase) ? `${urlBase}/pedido-personalizado` : urlBase;
     return {
       resposta:
-        `Seu deck merece um tapete único! Tecido liso que protege seus sleeves e base emborrachada que não escorrega na mesa ✨\n` +
-        `• *Tamanho M (60x35):* R$ 178 | *Tamanho G (75x35):* R$ 198\n` +
-        `Sobe sua arte direto aqui 👉 ${linkPers} — prefere o M ou o G?`,
+        `Você pode personalizar com a sua arte em tecido liso (protege seus sleeves) e base emborrachada antiderrapante ✨\n` +
+        `• *Tamanho M (60x35cm):* R$ 178,00 · *Tamanho G (75x35cm):* R$ 198,00\n` +
+        `Envie sua imagem aqui 👉 ${linkPers} — prefere o tamanho M ou G?`,
       chamarAtendente: false,
       origem: "local"
     };
   }
 
-  // 3. Produto específico encontrado no catálogo real do site (ex: Eldrazi, Pokémon, Blue-Eyes, etc.)
+  // 3. Produto específico encontrado no catálogo real do site
   if (produtosEncontrados.length > 0 && !/^(preco|valor|pix|frete)$/.test(t)) {
     const linhas = produtosEncontrados.map(formatarProdutoCurto).join("\n");
     return {
       resposta:
-        `Olha essa pedrada que tá disponível no site 👇\n${linhas}\n` +
-        `Tecido macio com base antiderrapante e Pix na hora. Quer garantir o tamanho M ou G?`,
+        `Encontrei estas opções excelentes no nosso site:\n${linhas}\n` +
+        `Tecido macio com base antiderrapante e Pix na hora. Prefere o tamanho M ou G?`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -456,8 +474,8 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
   if (/(caro|salgado|puxado|desconto|cupom|mais barato)/.test(t)) {
     return {
       resposta:
-        `Cara, ele dura anos sem desfiar e ainda protege seus sleeves em todo torneio — sai mais barato que trocar sleeve riscado! 😉\n` +
-        `E temos temáticos em promo a partir de *R$ 175* no Pix. Quer que eu chame o *${responsavel} em pessoa* se precisar de algo especial?`,
+        `Nossos playmats têm acabamento durável e tecido suave que ajuda a conservar seus sleeves por muito mais tempo 😊\n` +
+        `Temos modelos em promoção a partir de *R$ 175,00* no site (${urlBase}/catalogo). Quer que eu ajude a escolher um para o seu deck?`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -467,9 +485,9 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
   if (/(preco|valor|quanto custa|quanto ta|quanto sai|valores|orcamento)/.test(t)) {
     return {
       resposta:
-        `• *Personalizado (sua arte):* M por *R$ 178* · G (75x35) por *R$ 198*\n` +
-        `• *Temáticos (Yu-Gi-Oh!, Magic, Pokémon):* a partir de *R$ 175* na promo!\n` +
-        `Qual jogo você joga pra eu te indicar o modelo mais irado? 🎴`,
+        `• *Personalizado (sua arte):* M por *R$ 178,00* · G (75x35cm) por *R$ 198,00*\n` +
+        `• *Temáticos (Yu-Gi-Oh!, Magic, Pokémon):* a partir de *R$ 175,00* em promoção\n` +
+        `Qual jogo ou estilo você procura? 😊`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -479,8 +497,8 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
   if (/(pix|pagar|pagamento|forma de pagamento|cartao|parcela|boleto|qr code)/.test(t)) {
     return {
       resposta:
-        `No checkout do site você paga rapidinho no *Pix* (QR Code e Copia e Cola com aprovação imediata) ou pelas opções disponíveis na finalização! 💳\n` +
-        `Já escolheu seu modelo ou quer o link do catálogo?`,
+        `No checkout do site você paga de forma rápida via *Pix* (QR Code e Copia e Cola com aprovação imediata) ou pelas opções da loja 😊\n` +
+        `Já escolheu o seu playmat ou quer o link do catálogo?`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -490,8 +508,8 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
   if (/(frete|entrega|prazo|cep|envio|correio|transportadora|demora|chega|troca|devol)/.test(t)) {
     return {
       resposta:
-        `Você calcula o frete e prazo exatos colocando o CEP no carrinho lá em ${urlBase}/catalogo 🚚\n` +
-        `Se já fez um pedido e quer acompanhar, me avisa que chamo o *${responsavel} em pessoa* na hora!`,
+        `Você calcula o frete e prazo exatos informando seu CEP no carrinho em ${urlBase}/catalogo 🚚\n` +
+        `Se for sobre um pedido já feito, me avise que chamo o *${responsavel} em pessoa* agora mesmo!`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -501,8 +519,8 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
   if (/(yugioh|yu gi oh|magic|mtg|pokemon|tcg|tematico|catalogo|modelo|playmat|tapete|tamanho|medida)/.test(t)) {
     return {
       resposta:
-        `Temos coleções pesadas de *Yu-Gi-Oh!*, *Magic* e *Pokémon* (a partir de R$ 175 em promo) nos tamanhos *M (60x35)* e *G (75x35)* 🔥\n` +
-        `Dá uma olhada aqui 👉 ${urlBase}/catalogo — qual carta/deck você curte?`,
+        `Trabalhamos com playmats de *Yu-Gi-Oh!*, *Magic* e *Pokémon* nos tamanhos *M (60x35cm)* e *G (75x35cm)*, a partir de R$ 175,00 😊\n` +
+        `Veja todos os modelos aqui 👉 ${urlBase}/catalogo — qual jogo você curte?`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -511,7 +529,7 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
   // 9. Informação exclusiva do dono
   if (dicasDoDono.length > 0) {
     return {
-      resposta: `${dicasDoDono[0]}\nQuer que eu te mande o link direto pra fechar o seu?`,
+      resposta: `${dicasDoDono[0]}\nPosso te enviar o link direto para você garantir o seu?`,
       chamarAtendente: false,
       origem: "local"
     };
@@ -529,14 +547,14 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
     });
     if (relevante) {
       return {
-        resposta: `${relevante.trim().slice(0, 220)}\nQuer ver mais detalhes lá no site (${urlBase}/catalogo)?`,
+        resposta: `${relevante.trim().slice(0, 220)}\nQuer conferir mais detalhes no catálogo (${urlBase}/catalogo)?`,
         chamarAtendente: false,
         origem: "local"
       };
     }
   }
 
-  // 11. Sem confiança suficiente na base local -> chama o Gaicos em pessoa em vez de chutar resposta errada!
+  // 11. Sem confiança suficiente na base local -> chama o Gaicos em pessoa em vez de chutar resposta errada
   return {
     resposta: mensagemChamandoResponsavel(configIa),
     chamarAtendente: true,
@@ -547,6 +565,7 @@ function responderModoLocalInteligente(pergunta, configIa = {}, historico = []) 
 
 export function compactarRespostaCurta(texto) {
   return String(texto || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -577,8 +596,8 @@ async function chamarGemini(mensagensSistema, historico, pergunta, apiKey, model
       },
       contents,
       generationConfig: {
-        temperature: 0.65,
-        maxOutputTokens: 240
+        temperature: 0.6,
+        maxOutputTokens: 450
       }
     })
   });
@@ -611,8 +630,8 @@ async function chamarOpenAICompativel(endpoint, mensagensSistema, historico, per
     body: JSON.stringify({
       model: mod,
       messages,
-      temperature: 0.65,
-      max_tokens: 240
+      temperature: 0.6,
+      max_tokens: 450
     })
   });
 
@@ -627,14 +646,46 @@ async function chamarOpenAICompativel(endpoint, mensagensSistema, historico, per
   return texto;
 }
 
+async function chamarGroqComFallback(mensagensSistema, historico, pergunta, apiKey, modeloConfig) {
+  const inicial = String(modeloConfig || "").trim();
+  const candidatos = [];
+  if (inicial && inicial !== "llama-3.3-70b-versatile") {
+    candidatos.push(inicial);
+  }
+  for (const m of MODELOS_GROQ_FALLBACK) {
+    if (!candidatos.includes(m)) candidatos.push(m);
+  }
+
+  let ultimoErro = null;
+  for (const mod of candidatos) {
+    try {
+      return await chamarOpenAICompativel(
+        "https://api.groq.com/openai/v1/chat/completions",
+        mensagensSistema,
+        historico,
+        pergunta,
+        apiKey,
+        mod,
+        mod
+      );
+    } catch (err) {
+      ultimoErro = err;
+      const erroModelo = /404|model_not_found|decommissioned|not exist/i.test(err?.message || "");
+      if (!erroModelo) throw err;
+    }
+  }
+  throw ultimoErro || new Error("Nenhum modelo Groq respondeu.");
+}
+
 export async function gerarRespostaAtendimento({ jid = "simulacao", nomeCliente = "", mensagemCliente, configIa = {} }) {
   const pergunta = String(mensagemCliente || "").trim();
   const nomeBot = String(configIa.nomeBot || "Gaicos Jr").trim();
 
   if (!pergunta) {
     return {
-      resposta: `Opa! Aqui é o *${nomeBot}*! Como posso te ajudar a escolher seu playmat hoje?`,
+      resposta: `Olá! Aqui é o *${nomeBot}*. Como posso te ajudar a escolher seu playmat hoje? 😊`,
       chamarAtendente: false,
+      erroApi: null,
       origem: "local"
     };
   }
@@ -647,6 +698,7 @@ export async function gerarRespostaAtendimento({ jid = "simulacao", nomeCliente 
       resposta: msgTransferencia,
       chamarAtendente: true,
       motivoEscalacao: sinal.motivo,
+      erroApi: null,
       origem: "escalacao-automatica"
     };
   }
@@ -669,6 +721,7 @@ export async function gerarRespostaAtendimento({ jid = "simulacao", nomeCliente 
       resposta: respLimpa,
       chamarAtendente: pediuHumano,
       motivoEscalacao: pediuHumano ? "Regra treinada acionou atendente" : "",
+      erroApi: null,
       origem: "aprendizado-treinado"
     };
   }
@@ -699,21 +752,15 @@ export async function gerarRespostaAtendimento({ jid = "simulacao", nomeCliente 
     `=== BASE DE CONHECIMENTO DO SITE (${configIa.urlSite || "https://www.gaicos-store.com.br/"}) ===\n` +
     `${conhecimento}${blocoProdutosRapidos}`;
 
+  let erroApi = null;
+
   if (provedor !== "local" && apiKey.length >= 10) {
     try {
       let respostaBruta = "";
       if (provedor === "gemini") {
         respostaBruta = await chamarGemini(instrucaoCompleta, historico, pergunta, apiKey, configIa.modelo || "gemini-2.5-flash");
       } else if (provedor === "groq") {
-        respostaBruta = await chamarOpenAICompativel(
-          "https://api.groq.com/openai/v1/chat/completions",
-          instrucaoCompleta,
-          historico,
-          pergunta,
-          apiKey,
-          "llama-3.3-70b-versatile",
-          configIa.modelo
-        );
+        respostaBruta = await chamarGroqComFallback(instrucaoCompleta, historico, pergunta, apiKey, configIa.modelo);
       } else if (provedor === "openai") {
         respostaBruta = await chamarOpenAICompativel(
           "https://api.openai.com/v1/chat/completions",
@@ -743,10 +790,12 @@ export async function gerarRespostaAtendimento({ jid = "simulacao", nomeCliente 
           resposta: respostaLimpa,
           chamarAtendente: pediuHumano,
           motivoEscalacao: pediuHumano ? "IA solicitou Gaicos em pessoa" : "",
+          erroApi: null,
           origem: provedor
         };
       }
     } catch (err) {
+      erroApi = `${provedor.toUpperCase()}: ${err.message}`;
       console.log(`⚠️ Aviso: Falha na API (${provedor}), usando resposta inteligente local:`, err.message);
     }
   }
@@ -759,5 +808,5 @@ export async function gerarRespostaAtendimento({ jid = "simulacao", nomeCliente 
     resposta: local.resposta,
     origem: local.origem
   });
-  return local;
+  return { ...local, erroApi };
 }

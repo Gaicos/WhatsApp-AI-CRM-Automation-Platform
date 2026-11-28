@@ -31,7 +31,7 @@ const $ = (id) => document.getElementById(id);
 
 const MODELOS_PADRAO = {
   gemini: "gemini-2.5-flash",
-  groq: "llama-3.3-70b-versatile",
+  groq: "openai/gpt-oss-120b",
   openai: "gpt-4o-mini",
   local: ""
 };
@@ -39,7 +39,7 @@ const MODELOS_PADRAO = {
 const DICAS_PROVEDOR = {
   local: "Funciona imediatamente sem chave de API, usando respostas curtas baseadas no site e nos exemplos que você ensinar.",
   gemini: "Crie sua chave gratuita em aistudio.google.com/apikey (Modelo sugerido: gemini-2.5-flash).",
-  groq: "Crie sua chave gratuita em console.groq.com/keys (Modelo sugerido: llama-3.3-70b-versatile).",
+  groq: "Crie sua chave gratuita em console.groq.com/keys (Modelo sugerido: openai/gpt-oss-120b).",
   openai: "Use sua chave da plataforma OpenAI em platform.openai.com/api-keys (Modelo sugerido: gpt-4o-mini)."
 };
 
